@@ -31,6 +31,7 @@ namespace RcloneDriveManager
 
     public sealed class DriveProfile
     {
+        public string Id { get; set; }
         public string Name { get; set; }
         public string Remote { get; set; }
         public string RemotePath { get; set; }
@@ -48,6 +49,7 @@ namespace RcloneDriveManager
 
         public DriveProfile()
         {
+            Id = Guid.NewGuid().ToString("N");
             Name = "New Drive";
             Remote = "";
             RemotePath = "/";
@@ -825,7 +827,24 @@ namespace RcloneDriveManager
             }
             if (_profiles.Count == 0)
                 _profiles.Add(new DriveProfile { Name = "Ổ api", Remote = "api:" });
+            EnsureProfileIds();
             RenderProfiles();
+        }
+
+        private void EnsureProfileIds()
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var changed = false;
+            foreach (var p in _profiles)
+            {
+                if (string.IsNullOrWhiteSpace(p.Id) || seen.Contains(p.Id))
+                {
+                    p.Id = Guid.NewGuid().ToString("N");
+                    changed = true;
+                }
+                seen.Add(p.Id);
+            }
+            if (changed) SaveProfiles();
         }
 
         private void SaveProfiles()
@@ -1217,23 +1236,55 @@ namespace RcloneDriveManager
 
         private void NewProfile()
         {
+            var remote = Convert.ToString(remoteCombo.SelectedItem ?? remoteCombo.Text ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(remote))
+                remote = _remotes.FirstOrDefault() ?? "";
+            var baseName = string.IsNullOrWhiteSpace(nameBox.Text)
+                ? (string.IsNullOrWhiteSpace(remote) ? "Ổ" : remote.TrimEnd(':'))
+                : nameBox.Text.Trim();
             var p = new DriveProfile
             {
-                Name = "Ổ " + (_profiles.Count + 1),
-                Remote = _remotes.FirstOrDefault() ?? "",
-                DriveLetter = GetFreeDriveLetters().FirstOrDefault() ?? "Z:"
+                Name = UniqueProfileName(baseName),
+                Remote = remote,
+                RemotePath = DriveProfile.NormalizeRemotePath(pathBox.Text, remote),
+                DriveLetter = GetFreeDriveLetters().FirstOrDefault() ?? "Z:",
+                CacheMode = Convert.ToString(cacheModeCombo.SelectedItem ?? "full"),
+                CacheDir = cacheDirBox.Text.Trim(),
+                VfsCacheMaxAge = string.IsNullOrWhiteSpace(cacheMaxAgeBox.Text) ? "72h" : cacheMaxAgeBox.Text.Trim(),
+                VfsWriteBack = string.IsNullOrWhiteSpace(writeBackBox.Text) ? "5s" : writeBackBox.Text.Trim(),
+                ReadOnly = readOnlyBox.Checked,
+                AutoMount = autoMountBox.Checked,
+                NetworkMode = networkModeBox.Checked,
+                Transfers = (int)transfersBox.Value,
+                BufferSizeMb = (int)bufferBox.Value,
+                ExtraArgs = extraArgsBox.Text.Trim()
             };
             _profiles.Add(p);
             SaveProfiles();
             RenderProfiles();
             SelectProfile(p);
+            AddLog("Đã tạo profile mới: " + p.Name + " dùng " + p.Remote + p.RemotePath + " -> " + p.DriveLetter);
+        }
+
+        private string UniqueProfileName(string baseName)
+        {
+            baseName = string.IsNullOrWhiteSpace(baseName) ? "Ổ" : baseName.Trim();
+            if (!_profiles.Any(p => string.Equals(p.Name, baseName, StringComparison.OrdinalIgnoreCase)))
+                return baseName;
+            for (var i = 2; i < 1000; i++)
+            {
+                var candidate = baseName + " " + i;
+                if (!_profiles.Any(p => string.Equals(p.Name, candidate, StringComparison.OrdinalIgnoreCase)))
+                    return candidate;
+            }
+            return baseName + " " + DateTime.Now.ToString("HHmmss");
         }
 
         private void DeleteCurrentProfile()
         {
             var p = SelectedProfile;
             if (p == null) return;
-            if (IsMounted(p.DriveLetter))
+            if (IsMountedProfile(p))
             {
                 MessageBox.Show("Hãy ngắt kết nối profile trước.", "Trình quản lý ổ Rclone", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
@@ -1568,7 +1619,16 @@ namespace RcloneDriveManager
             string drive;
             if (_activeDrives.TryGetValue(profile, out drive))
                 return IsMounted(drive);
-            return IsMounted(profile.DriveLetter);
+            if (IsAutoDrive(profile.DriveLetter)) return false;
+            var normalized = NormalizeDriveChoice(profile.DriveLetter);
+            MountedDriveInfo detected;
+            return _detectedRcloneDrives.TryGetValue(normalized, out detected) &&
+                   string.Equals(NormalizeSourceForCompare(detected.DisplayRoot), NormalizeSourceForCompare(profile.Source), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private string NormalizeSourceForCompare(string source)
+        {
+            return (source ?? "").Trim().Trim('"').Replace('\\', '/').TrimEnd('/');
         }
 
         private void CleanupDeadMountState(DriveProfile profile)
