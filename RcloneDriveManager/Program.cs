@@ -349,18 +349,19 @@ namespace RcloneDriveManager
         {
             var page = new TabPage("Ổ đĩa") { BackColor = _surface, Padding = new Padding(18) };
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, BackColor = _surface };
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             page.Controls.Add(pageLayout);
 
-            var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, Height = 58, Padding = new Padding(0, 4, 0, 8), BackColor = _surface, WrapContents = false };
+            var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, Height = 96, Padding = new Padding(0, 4, 0, 8), BackColor = _surface, WrapContents = true };
             actions.Controls.Add(ActionButton("Kết nối", async (s, e) => await MountSelectedAsync(), _primary, Color.White, 124));
             actions.Controls.Add(ActionButton("Ngắt", (s, e) => UnmountSelected(), _surface, _danger, 96));
             actions.Controls.Add(ActionButton("Mở ổ", (s, e) => OpenSelectedDrive(), _surface, _text, 96));
             actions.Controls.Add(ActionButton("Lưu", (s, e) => SaveCurrentProfile(), _surface, _text, 86));
             actions.Controls.Add(ActionButton("Web UI", (s, e) => StartWebUi(), _surface, _text, 96));
             actions.Controls.Add(ActionButton("Cache", (s, e) => BrowseCacheDirForSelectedProfile(), _surface, _text, 96));
+            actions.Controls.Add(ActionButton("Dọn cache", (s, e) => ClearCacheForSelectedProfile(), _surface, _danger, 112));
             actions.Controls.Add(ActionButton("Code IDE", (s, e) => ApplyCodeIdePreset(), _surface, _text, 104));
             pageLayout.Controls.Add(actions, 0, 0);
 
@@ -504,6 +505,8 @@ namespace RcloneDriveManager
             mountActions.Controls.Add(ActionButton("Tạo BAT mount", (s, e) => CreateBatForSelected(), _surface, _text, 132));
             mountActions.Controls.Add(ActionButton("Tạo BAT ngắt", (s, e) => CreateUnmountBatForSelected(), _surface, _danger, 126));
             mountActions.Controls.Add(ActionButton("Cache tất cả", (s, e) => BrowseCacheDirForAllProfiles(), _surface, _text, 116));
+            mountActions.Controls.Add(ActionButton("Dọn cache", (s, e) => ClearCacheForSelectedProfile(), _surface, _danger, 112));
+            mountActions.Controls.Add(ActionButton("Dọn cache tất cả", (s, e) => ClearCacheForAllProfiles(), _surface, _danger, 148));
             layout.Controls.Add(mountActions, 0, 3);
 
             var systemActions = ToolGroup("Hệ thống");
@@ -1364,6 +1367,132 @@ namespace RcloneDriveManager
             }
         }
 
+        private void ClearCacheForSelectedProfile()
+        {
+            SaveCurrentProfile();
+            var p = SelectedProfile;
+            if (p == null)
+            {
+                MessageBox.Show("Hay chon mot profile truoc.", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            ClearCacheDirectories(new[] { p.CacheDir }, "profile " + p.Name);
+        }
+
+        private void ClearCacheForAllProfiles()
+        {
+            SaveCurrentProfile();
+            var dirs = _profiles.Select(p => p.CacheDir).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (dirs.Count == 0)
+            {
+                AddLog("Khong co thu muc cache nao de don.", "WARN");
+                return;
+            }
+            ClearCacheDirectories(dirs, "tat ca profile");
+        }
+
+        private void ClearCacheDirectories(IEnumerable<string> cacheDirs, string scope)
+        {
+            var dirs = cacheDirs
+                .Select(ExpandCacheDir)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (dirs.Count == 0)
+            {
+                AddLog("Chua dat thu muc cache.", "WARN");
+                return;
+            }
+
+            var message = "Don cache cho " + scope + "?\r\n\r\n" + string.Join("\r\n", dirs) + "\r\n\r\nHay ngat o dang mount truoc de tranh xoa file cache dang ghi.";
+            if (MessageBox.Show(message, "Don cache rclone", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                return;
+
+            long freedBytes = 0;
+            var removed = 0;
+            foreach (var dir in dirs)
+            {
+                if (!Directory.Exists(dir))
+                {
+                    AddLog("Cache khong ton tai: " + dir, "WARN");
+                    continue;
+                }
+                if (!IsSafeCacheDir(dir))
+                {
+                    AddLog("Bo qua thu muc cache khong an toan: " + dir, "ERROR");
+                    continue;
+                }
+
+                foreach (var file in Directory.GetFiles(dir, "*", SearchOption.AllDirectories))
+                {
+                    try { freedBytes += new FileInfo(file).Length; } catch { }
+                }
+                removed += ClearDirectoryContents(dir);
+                AddLog("Da don cache: " + dir);
+            }
+            AddLog("Don cache xong. Da xoa khoang " + FormatBytes(freedBytes) + ", muc da xu ly: " + removed);
+        }
+
+        private string ExpandCacheDir(string path)
+        {
+            return string.IsNullOrWhiteSpace(path) ? "" : Path.GetFullPath(Environment.ExpandEnvironmentVariables(path.Trim()));
+        }
+
+        private bool IsSafeCacheDir(string dir)
+        {
+            if (string.IsNullOrWhiteSpace(dir)) return false;
+            var full = Path.GetFullPath(dir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var root = Path.GetPathRoot(full).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (string.Equals(full, root, StringComparison.OrdinalIgnoreCase)) return false;
+            var user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (string.Equals(full, user, StringComparison.OrdinalIgnoreCase)) return false;
+            return full.IndexOf("cache", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   full.IndexOf("rclone", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private int ClearDirectoryContents(string dir)
+        {
+            var removed = 0;
+            foreach (var file in Directory.GetFiles(dir))
+            {
+                try
+                {
+                    File.SetAttributes(file, FileAttributes.Normal);
+                    File.Delete(file);
+                    removed++;
+                }
+                catch (Exception ex)
+                {
+                    AddLog("Khong xoa duoc file cache " + file + ": " + ex.Message, "WARN");
+                }
+            }
+            foreach (var subDir in Directory.GetDirectories(dir))
+            {
+                try
+                {
+                    Directory.Delete(subDir, true);
+                    removed++;
+                }
+                catch (Exception ex)
+                {
+                    AddLog("Khong xoa duoc thu muc cache " + subDir + ": " + ex.Message, "WARN");
+                }
+            }
+            return removed;
+        }
+
+        private string FormatBytes(long bytes)
+        {
+            string[] units = { "B", "KB", "MB", "GB", "TB" };
+            double value = bytes;
+            var unit = 0;
+            while (value >= 1024 && unit < units.Length - 1)
+            {
+                value /= 1024;
+                unit++;
+            }
+            return value.ToString(unit == 0 ? "0" : "0.##") + " " + units[unit];
+        }
         private void OpenDriveSettingsDialog()
         {
             var p = SelectedProfile;
