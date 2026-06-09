@@ -5,7 +5,9 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Net;
 using System.Net.NetworkInformation;
 using System.Security.Principal;
 using System.Text;
@@ -183,8 +185,10 @@ namespace RcloneDriveManager
             {
                 LoadProfiles();
                 RefreshDriveLetters();
+                await EnsureRcloneAvailableAsync();
                 RunStartupDiagnostics();
-                await RefreshRemotesAsync();
+                if (File.Exists(_rcloneExe))
+                    await RefreshRemotesAsync();
                 SelectFirstProfile();
                 if (_args.Any(a => string.Equals(a, "--automount", StringComparison.OrdinalIgnoreCase)))
                     await MountAutoProfilesAsync();
@@ -720,6 +724,60 @@ namespace RcloneDriveManager
             };
             if (!winfspPaths.Any(File.Exists))
                 AddLog("Chưa phát hiện WinFsp. Mount rclone trên Windows cần WinFsp để tạo ổ đĩa.", "WARN");
+        }
+
+        private async Task EnsureRcloneAvailableAsync()
+        {
+            if (File.Exists(_rcloneExe)) return;
+            AddLog("Không thấy rclone.exe trong thư mục app.");
+            var confirm = MessageBox.Show(
+                "Chưa có rclone.exe cạnh RcloneDrive.exe.\r\n\r\nBạn có muốn tải rclone bản Windows 64-bit mới nhất từ rclone.org không?",
+                "Tải rclone.exe",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+            if (confirm != DialogResult.Yes) return;
+            await DownloadAndInstallRcloneAsync();
+        }
+
+        private async Task DownloadAndInstallRcloneAsync()
+        {
+            const string url = "https://downloads.rclone.org/rclone-current-windows-amd64.zip";
+            var tempRoot = Path.Combine(Path.GetTempPath(), "RcloneDriveManager", Guid.NewGuid().ToString("N"));
+            var zipPath = Path.Combine(tempRoot, "rclone-current-windows-amd64.zip");
+            var extractDir = Path.Combine(tempRoot, "extract");
+            try
+            {
+                Directory.CreateDirectory(tempRoot);
+                Directory.CreateDirectory(extractDir);
+                statusLabel.Text = "Đang tải rclone...";
+                AddLog("Tải rclone từ " + url);
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                using (var client = new WebClient())
+                {
+                    await client.DownloadFileTaskAsync(new Uri(url), zipPath);
+                }
+
+                statusLabel.Text = "Đang giải nén rclone...";
+                AddLog("Giải nén rclone...");
+                ZipFile.ExtractToDirectory(zipPath, extractDir);
+                var extractedExe = Directory.GetFiles(extractDir, "rclone.exe", SearchOption.AllDirectories).FirstOrDefault();
+                if (string.IsNullOrWhiteSpace(extractedExe) || !File.Exists(extractedExe))
+                    throw new FileNotFoundException("Không tìm thấy rclone.exe trong file zip.");
+
+                File.Copy(extractedExe, _rcloneExe, true);
+                statusLabel.Text = "Đã tải rclone";
+                AddLog("Đã cài rclone.exe vào: " + _rcloneExe);
+            }
+            catch (Exception ex)
+            {
+                statusLabel.Text = "Tải rclone lỗi";
+                AddLog("Tải rclone thất bại: " + ex.Message, "ERROR");
+                MessageBox.Show("Tải rclone thất bại:\r\n" + ex.Message, "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                try { if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, true); } catch { }
+            }
         }
 
         private void LoadProfiles()

@@ -15,9 +15,11 @@
 
 ## Chạy app
 
-Đặt `RcloneDrive.exe` cùng thư mục với `rclone.exe`, sau đó mở `RcloneDrive.exe`.
+Mở `RcloneDrive.exe`.
 
-`rclone.exe` không được đưa vào repo này. Tải rclone tại trang chính thức rồi đặt cạnh app.
+Nếu chưa có `rclone.exe` cạnh app, chương trình sẽ hỏi và tự tải `rclone-current-windows-amd64.zip` từ trang chính thức của rclone, giải nén rồi đặt `rclone.exe` cạnh app.
+
+`rclone.exe` không được đưa vào repo này để repo gọn hơn.
 
 ## Source
 
@@ -30,5 +32,5 @@ RcloneDriveManager/Program.cs
 Build bằng Roslyn C# compiler trên Windows:
 
 ```powershell
-& 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\Roslyn\csc.exe' /codepage:65001 /target:winexe /platform:x64 /win32icon:'.\RcloneDriveManager\RcloneDrive.ico' /out:'.\RcloneDrive.exe' /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll /reference:System.Windows.Forms.dll /reference:System.Web.Extensions.dll '.\RcloneDriveManager\Program.cs'
+& 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\Roslyn\csc.exe' /codepage:65001 /target:winexe /platform:x64 /win32icon:'.\RcloneDriveManager\RcloneDrive.ico' /out:'.\RcloneDrive.exe' /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll /reference:System.Windows.Forms.dll /reference:System.Web.Extensions.dll /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll '.\RcloneDriveManager\Program.cs'
 ```
