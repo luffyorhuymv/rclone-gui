@@ -1652,13 +1652,20 @@ namespace RcloneDriveManager
             var p = SelectedProfile;
             if (p == null)
                 p = CreateProfileFromCurrentFields();
+            else if (IsMountedProfile(p))
+            {
+                var baseName = string.IsNullOrWhiteSpace(nameBox.Text) ? p.Name : nameBox.Text.Trim();
+                p = CreateProfileFromCurrentFields(UniqueProfileName(baseName), true);
+                if (p != null)
+                    AddLog("Profile đang kết nối, tự tạo ổ mới để mount thêm.");
+            }
             else
                 SaveCurrentProfile();
             if (p == null) return;
             await MountProfileAsync(p);
         }
 
-        private DriveProfile CreateProfileFromCurrentFields()
+        private DriveProfile CreateProfileFromCurrentFields(string forcedName = null, bool preferFreeDrive = false)
         {
             var remote = Convert.ToString(remoteCombo.SelectedItem ?? remoteCombo.Text ?? "").Trim();
             if (string.IsNullOrWhiteSpace(remote))
@@ -1669,10 +1676,12 @@ namespace RcloneDriveManager
             }
             var p = new DriveProfile
             {
-                Name = string.IsNullOrWhiteSpace(nameBox.Text) ? remote.TrimEnd(':') : nameBox.Text.Trim(),
+                Name = string.IsNullOrWhiteSpace(forcedName)
+                    ? UniqueProfileName(string.IsNullOrWhiteSpace(nameBox.Text) ? remote.TrimEnd(':') : nameBox.Text.Trim())
+                    : forcedName.Trim(),
                 Remote = remote,
                 RemotePath = DriveProfile.NormalizeRemotePath(pathBox.Text, remote),
-                DriveLetter = NormalizeDriveChoice(Convert.ToString(driveCombo.SelectedItem ?? driveCombo.Text ?? "AUTO")),
+                DriveLetter = DriveChoiceFromForm(preferFreeDrive),
                 CacheMode = Convert.ToString(cacheModeCombo.SelectedItem ?? "full"),
                 CacheDir = cacheDirBox.Text.Trim(),
                 VfsCacheMaxAge = string.IsNullOrWhiteSpace(cacheMaxAgeBox.Text) ? "72h" : cacheMaxAgeBox.Text.Trim(),
@@ -1690,6 +1699,14 @@ namespace RcloneDriveManager
             SelectProfile(p);
             AddLog("Đã tạo profile mới từ form hiện tại: " + p.Name);
             return p;
+        }
+
+        private string DriveChoiceFromForm(bool preferFreeDrive)
+        {
+            var selected = NormalizeDriveChoice(Convert.ToString(driveCombo.SelectedItem ?? driveCombo.Text ?? "AUTO"));
+            if (!preferFreeDrive) return selected;
+            if (!IsAutoDrive(selected) && IsDriveAvailableForMount(selected)) return selected;
+            return GetFreeDriveLetters().FirstOrDefault() ?? "AUTO";
         }
 
         private async Task MountProfileAsync(DriveProfile p)
