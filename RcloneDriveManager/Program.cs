@@ -305,14 +305,20 @@ namespace RcloneDriveManager
             profileList.SelectedIndexChanged += (s, e) => LoadSelectedProfileIntoFields();
             leftLayout.Controls.Add(profileList, 0, 1);
 
-            var leftButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, Padding = new Padding(0, 4, 0, 0) };
-            leftButtons.Controls.Add(ActionButton("Mới", (s, e) => NewProfile(), _surface, _text, 66));
-            leftButtons.Controls.Add(ActionButton("Lưu", (s, e) => SaveCurrentProfile(), _primary, Color.White, 66));
-            leftButtons.Controls.Add(ActionButton("Xóa", (s, e) => DeleteCurrentProfile(), _surface, _danger, 66));
-            leftButtons.Controls.Add(ActionButton("Cài đặt", (s, e) => OpenDriveSettingsDialog(), _surface, _text, 92));
-            statusLabel = new Label { Text = "Sẵn sàng", AutoSize = false, Width = 310, Height = 28, ForeColor = _muted, TextAlign = ContentAlignment.MiddleLeft };
-            leftButtons.Controls.Add(statusLabel);
-            leftLayout.Controls.Add(leftButtons, 0, 2);
+            var leftActions = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, Padding = new Padding(0, 6, 0, 0), BackColor = _surface };
+            leftActions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            leftActions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            leftActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            leftActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            leftActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            leftActions.Controls.Add(ActionButton("Mới", (s, e) => NewProfile(), _surface, _text, 142), 0, 0);
+            leftActions.Controls.Add(ActionButton("Lưu", (s, e) => SaveCurrentProfile(), _primary, Color.White, 142), 1, 0);
+            leftActions.Controls.Add(ActionButton("Cài đặt", (s, e) => OpenDriveSettingsDialog(), _surface, _text, 142), 0, 1);
+            leftActions.Controls.Add(ActionButton("Xóa", (s, e) => DeleteCurrentProfile(), _surface, _danger, 142), 1, 1);
+            statusLabel = new Label { Text = "Sẵn sàng", Dock = DockStyle.Fill, ForeColor = _muted, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(4, 0, 0, 0) };
+            leftActions.Controls.Add(statusLabel, 0, 2);
+            leftActions.SetColumnSpan(statusLabel, 2);
+            leftLayout.Controls.Add(leftActions, 0, 2);
 
             mainTabs = new TabControl { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 10F), Padding = new Point(20, 8) };
             root.Controls.Add(mainTabs, 1, 1);
