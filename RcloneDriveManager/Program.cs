@@ -91,15 +91,41 @@ namespace RcloneDriveManager
             if (Regex.IsMatch(path, @"^[A-Za-z]:/"))
                 path = path.Substring(2);
 
+            var pathWasNetworkShare = path.StartsWith("//", StringComparison.Ordinal);
+            path = StripWindowsNetworkHost(path);
+
             while (path.StartsWith("//", StringComparison.Ordinal))
                 path = path.Substring(1);
 
             while (path.Contains("//"))
                 path = path.Replace("//", "/");
 
+            var strippedPseudoHost = false;
+            if (path.StartsWith("/server/", StringComparison.OrdinalIgnoreCase))
+            {
+                path = path.Substring("/server".Length);
+                strippedPseudoHost = true;
+            }
+            if (path.StartsWith("/localhost/", StringComparison.OrdinalIgnoreCase))
+            {
+                path = path.Substring("/localhost".Length);
+                strippedPseudoHost = true;
+            }
+
+            if ((pathWasNetworkShare || strippedPseudoHost) && path.StartsWith("/", StringComparison.Ordinal) && path.Length > 1)
+                path = path.Substring(1);
+
             if (path.Length == 0) path = "/";
-            if (!path.StartsWith("/", StringComparison.Ordinal)) path = "/" + path;
             return path;
+        }
+
+        private static string StripWindowsNetworkHost(string path)
+        {
+            if (!path.StartsWith("//", StringComparison.Ordinal)) return path;
+            var withoutSlashes = path.TrimStart('/');
+            var slash = withoutSlashes.IndexOf('/');
+            if (slash < 0) return "/";
+            return withoutSlashes.Substring(slash);
         }
     }
 
