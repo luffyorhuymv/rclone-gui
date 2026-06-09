@@ -277,10 +277,7 @@ namespace RcloneDriveManager
 
             var headerActions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, BackColor = _surface, Padding = new Padding(0, 8, 0, 0) };
             headerActions.Controls.Add(ActionButton("Web UI", (s, e) => StartWebUi(), _surface, _text, 92));
-            headerActions.Controls.Add(ActionButton("Thêm config", (s, e) => SelectTab("Thêm config"), _surface, _text, 120));
-            headerActions.Controls.Add(ActionButton("Quét ổ", (s, e) => RefreshMountedDriveList(), _surface, _text, 88));
             headerActions.Controls.Add(ActionButton("Làm mới", async (s, e) => await RefreshAllAsync(), _surface, _text, 104));
-            headerActions.Controls.Add(ActionButton("Cài đặt ổ", (s, e) => OpenDriveSettingsDialog(), _surface, _text, 112));
             headerActions.Controls.Add(ActionButton("Ngắt", (s, e) => UnmountSelected(), _surface, _danger, 86));
             headerActions.Controls.Add(ActionButton("Kết nối", async (s, e) => await MountSelectedAsync(), _primary, Color.White, 112));
             header.Controls.Add(headerActions, 1, 0);
@@ -349,22 +346,34 @@ namespace RcloneDriveManager
         {
             var page = new TabPage("Ổ đĩa") { BackColor = _surface, Padding = new Padding(18) };
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, BackColor = _surface };
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             page.Controls.Add(pageLayout);
 
-            var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, Height = 96, Padding = new Padding(0, 4, 0, 8), BackColor = _surface, WrapContents = true };
-            actions.Controls.Add(ActionButton("Kết nối", async (s, e) => await MountSelectedAsync(), _primary, Color.White, 124));
-            actions.Controls.Add(ActionButton("Ngắt", (s, e) => UnmountSelected(), _surface, _danger, 96));
-            actions.Controls.Add(ActionButton("Mở ổ", (s, e) => OpenSelectedDrive(), _surface, _text, 96));
-            actions.Controls.Add(ActionButton("Lưu", (s, e) => SaveCurrentProfile(), _surface, _text, 86));
-            actions.Controls.Add(ActionButton("Web UI", (s, e) => StartWebUi(), _surface, _text, 96));
-            actions.Controls.Add(ActionButton("Cache", (s, e) => BrowseCacheDirForSelectedProfile(), _surface, _text, 96));
-            actions.Controls.Add(ActionButton("Dọn cache", (s, e) => ClearCacheForSelectedProfile(), _surface, _danger, 112));
-            actions.Controls.Add(ActionButton("Code IDE", (s, e) => ApplyCodeIdePreset(), _surface, _text, 104));
-            pageLayout.Controls.Add(actions, 0, 0);
+            var actionBar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, BackColor = _surface, Padding = new Padding(0, 4, 0, 8) };
+            actionBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+            actionBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+            actionBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
 
+            var connectGroup = CompactButtonGroup("Kết nối");
+            connectGroup.Controls.Add(ActionButton("Kết nối", async (s, e) => await MountSelectedAsync(), _primary, Color.White, 124));
+            connectGroup.Controls.Add(ActionButton("Ngắt", (s, e) => UnmountSelected(), _surface, _danger, 96));
+            connectGroup.Controls.Add(ActionButton("Mở ổ", (s, e) => OpenSelectedDrive(), _surface, _text, 96));
+            actionBar.Controls.Add(connectGroup, 0, 0);
+
+            var profileGroup = CompactButtonGroup("Profile");
+            profileGroup.Controls.Add(ActionButton("Lưu", (s, e) => SaveCurrentProfile(), _surface, _text, 86));
+            profileGroup.Controls.Add(ActionButton("Cài đặt", (s, e) => OpenDriveSettingsDialog(), _surface, _text, 96));
+            profileGroup.Controls.Add(ActionButton("Code IDE", (s, e) => ApplyCodeIdePreset(), _surface, _text, 104));
+            actionBar.Controls.Add(profileGroup, 0, 1);
+
+            var toolGroup = CompactButtonGroup("Công cụ");
+            toolGroup.Controls.Add(ActionButton("Web UI", (s, e) => StartWebUi(), _surface, _text, 96));
+            toolGroup.Controls.Add(ActionButton("Cache", (s, e) => BrowseCacheDirForSelectedProfile(), _surface, _text, 96));
+            toolGroup.Controls.Add(ActionButton("Dọn cache", (s, e) => ClearCacheForSelectedProfile(), _surface, _danger, 112));
+            actionBar.Controls.Add(toolGroup, 0, 2);
+            pageLayout.Controls.Add(actionBar, 0, 0);
             var checks = new FlowLayoutPanel { Dock = DockStyle.Fill, Height = 46, Padding = new Padding(0, 6, 0, 4), BackColor = _surface };
             readOnlyBox = new CheckBox { Text = "Chỉ đọc", Width = 100 };
             autoMountBox = new CheckBox { Text = "Tự mount khi mở app", Width = 190 };
@@ -539,6 +548,31 @@ namespace RcloneDriveManager
                 Font = new Font("Segoe UI", 9F, FontStyle.Bold),
                 ForeColor = _muted,
                 Margin = new Padding(0, 3, 10, 3)
+            });
+            return panel;
+        }
+
+        private FlowLayoutPanel CompactButtonGroup(string title)
+        {
+            var panel = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = _surface,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true,
+                Padding = new Padding(0, 0, 8, 0),
+                Margin = new Padding(0)
+            };
+            panel.Controls.Add(new Label
+            {
+                Text = title,
+                AutoSize = false,
+                Width = 78,
+                Height = 36,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Font = new Font("Segoe UI", 8.8F, FontStyle.Bold),
+                ForeColor = _muted,
+                Margin = new Padding(0, 3, 8, 3)
             });
             return panel;
         }
