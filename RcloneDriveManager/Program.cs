@@ -144,6 +144,16 @@ namespace RcloneDriveManager
         public bool TimedOut { get; set; }
     }
 
+    public sealed class RcloneFileItem
+    {
+        public string Path { get; set; }
+        public string Name { get; set; }
+        public long Size { get; set; }
+        public string MimeType { get; set; }
+        public string ModTime { get; set; }
+        public bool IsDir { get; set; }
+    }
+
     public sealed class RcloneMountProcessInfo
     {
         public int ProcessId { get; set; }
@@ -454,7 +464,12 @@ namespace RcloneDriveManager
             top.Controls.Add(ActionButton("Xóa", async (s, e) => await BrowseDeleteAsync(), _surface, _danger, 78), 6, 0);
 
             browserList = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, Font = new Font("Consolas", 9.5F), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.FromArgb(248, 250, 252) };
-            browserList.Columns.Add("Tên", 420);
+            browserList.Columns.Add("Loại", 82);
+            browserList.Columns.Add("Tên", 260);
+            browserList.Columns.Add("Kích thước", 110);
+            browserList.Columns.Add("Ngày sửa", 168);
+            browserList.Columns.Add("Path", 360);
+            browserList.DoubleClick += async (s, e) => await BrowseOpenSelectedAsync();
             pageLayout.Controls.Add(browserList, 0, 1);
             return page;
         }
@@ -2421,26 +2436,80 @@ namespace RcloneDriveManager
         {
             browserList.Items.Clear();
             var target = RemotePath(browseRemoteCombo, browsePathBox);
-            var output = await RunCaptureAsync("lsf", target);
-            foreach (var line in output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
-                browserList.Items.Add(new ListViewItem(line));
+            var output = await RunCaptureAsync("lsjson", target, "--no-mimetype");
+            List<RcloneFileItem> items = null;
+            try
+            {
+                items = _json.Deserialize<List<RcloneFileItem>>(output);
+            }
+            catch (Exception ex)
+            {
+                AddLog("Không đọc được danh sách file JSON: " + ex.Message, "ERROR");
+            }
+            if (items == null) return;
+
+            foreach (var item in items.OrderByDescending(x => x.IsDir).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                var row = new ListViewItem(item.IsDir ? "Thư mục" : "File");
+                row.SubItems.Add(string.IsNullOrWhiteSpace(item.Name) ? item.Path : item.Name);
+                row.SubItems.Add(item.IsDir ? "" : FormatBytes(item.Size));
+                row.SubItems.Add(FormatRemoteTime(item.ModTime));
+                row.SubItems.Add(item.Path ?? "");
+                row.Tag = item;
+                browserList.Items.Add(row);
+            }
+        }
+
+        private async Task BrowseOpenSelectedAsync()
+        {
+            if (browserList.SelectedItems.Count == 0) return;
+            var item = browserList.SelectedItems[0].Tag as RcloneFileItem;
+            if (item == null || !item.IsDir) return;
+            browsePathBox.Text = JoinRemotePath(browsePathBox.Text, item.Name ?? item.Path);
+            await BrowseListAsync();
         }
 
         private async Task BrowseMkdirAsync()
         {
             var name = Prompt.Show("Folder name", "Create folder");
             if (string.IsNullOrWhiteSpace(name)) return;
-            await RunCaptureAsync("mkdir", RemotePath(browseRemoteCombo, browsePathBox).TrimEnd('/') + "/" + name.Trim());
+            await RunCaptureAsync("mkdir", JoinRemoteSource(RemotePath(browseRemoteCombo, browsePathBox), name.Trim()));
             await BrowseListAsync();
         }
 
         private async Task BrowseDeleteAsync()
         {
             if (browserList.SelectedItems.Count == 0) return;
-            var name = browserList.SelectedItems[0].Text;
+            var item = browserList.SelectedItems[0].Tag as RcloneFileItem;
+            var name = item == null ? browserList.SelectedItems[0].Text : (item.Name ?? item.Path);
             if (MessageBox.Show("Delete " + name + " ?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-            await RunCaptureAsync("deletefile", RemotePath(browseRemoteCombo, browsePathBox).TrimEnd('/') + "/" + name.TrimEnd('/'));
+            var target = JoinRemoteSource(RemotePath(browseRemoteCombo, browsePathBox), name.TrimEnd('/'));
+            await RunCaptureAsync(item != null && item.IsDir ? "purge" : "deletefile", target);
             await BrowseListAsync();
+        }
+
+        private string JoinRemotePath(string current, string child)
+        {
+            child = (child ?? "").Trim().Trim('/');
+            if (string.IsNullOrWhiteSpace(child)) return string.IsNullOrWhiteSpace(current) ? "/" : current.Trim();
+            var basePath = string.IsNullOrWhiteSpace(current) ? "/" : current.Trim().Replace('\\', '/').TrimEnd('/');
+            if (string.Equals(basePath, "/", StringComparison.Ordinal)) return "/" + child;
+            return basePath + "/" + child;
+        }
+
+        private string JoinRemoteSource(string source, string child)
+        {
+            child = (child ?? "").Trim().Trim('/');
+            if (string.IsNullOrWhiteSpace(child)) return source;
+            return source.TrimEnd('/') + "/" + child;
+        }
+
+        private string FormatRemoteTime(string value)
+        {
+            DateTime parsed;
+            if (DateTime.TryParse(value, out parsed))
+                return parsed.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+            return value ?? "";
         }
 
         private async Task RunTransferAsync()
