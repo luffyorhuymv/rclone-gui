@@ -68,9 +68,36 @@ namespace RcloneDriveManager
         {
             get
             {
-                var path = string.IsNullOrWhiteSpace(RemotePath) ? "/" : RemotePath.Trim();
-                return (Remote ?? "") + path;
+                return BuildSource(Remote, RemotePath);
             }
+        }
+
+        public static string BuildSource(string remote, string remotePath)
+        {
+            return (remote ?? "").Trim() + NormalizeRemotePath(remotePath, remote);
+        }
+
+        public static string NormalizeRemotePath(string value, string remote)
+        {
+            var path = string.IsNullOrWhiteSpace(value) ? "/" : value.Trim();
+            path = path.Replace('\\', '/');
+
+            var remoteName = (remote ?? "").Trim().TrimEnd(':');
+            if (remoteName.Length > 0 && path.StartsWith(remoteName + ":", StringComparison.OrdinalIgnoreCase))
+                path = path.Substring(remoteName.Length + 1).Trim();
+
+            if (Regex.IsMatch(path, @"^[A-Za-z]:/"))
+                path = path.Substring(2);
+
+            while (path.StartsWith("//", StringComparison.Ordinal))
+                path = path.Substring(1);
+
+            while (path.Contains("//"))
+                path = path.Replace("//", "/");
+
+            if (path.Length == 0) path = "/";
+            if (!path.StartsWith("/", StringComparison.Ordinal)) path = "/" + path;
+            return path;
         }
     }
 
@@ -1100,7 +1127,7 @@ namespace RcloneDriveManager
             {
                 nameBox.Text = p.Name;
                 SelectComboValue(remoteCombo, p.Remote);
-                pathBox.Text = p.RemotePath;
+                pathBox.Text = DriveProfile.NormalizeRemotePath(p.RemotePath, p.Remote);
                 SelectComboValue(driveCombo, p.DriveLetter);
                 SelectComboValue(cacheModeCombo, p.CacheMode);
                 cacheDirBox.Text = p.CacheDir;
@@ -1156,7 +1183,7 @@ namespace RcloneDriveManager
             if (p == null) return;
             p.Name = string.IsNullOrWhiteSpace(nameBox.Text) ? "Ổ đĩa" : nameBox.Text.Trim();
             p.Remote = Convert.ToString(remoteCombo.SelectedItem ?? remoteCombo.Text ?? "").Trim();
-            p.RemotePath = string.IsNullOrWhiteSpace(pathBox.Text) ? "/" : pathBox.Text.Trim();
+            p.RemotePath = DriveProfile.NormalizeRemotePath(pathBox.Text, p.Remote);
             p.DriveLetter = NormalizeDriveChoice(Convert.ToString(driveCombo.SelectedItem ?? driveCombo.Text ?? "AUTO"));
             p.CacheMode = Convert.ToString(cacheModeCombo.SelectedItem ?? "full");
             p.CacheDir = cacheDirBox.Text.Trim();
@@ -1337,7 +1364,7 @@ namespace RcloneDriveManager
 
                 p.Name = string.IsNullOrWhiteSpace(dName.Text) ? "Ổ đĩa" : dName.Text.Trim();
                 p.Remote = Convert.ToString(dRemote.SelectedItem ?? dRemote.Text ?? "").Trim();
-                p.RemotePath = string.IsNullOrWhiteSpace(dPath.Text) ? "/" : dPath.Text.Trim();
+                p.RemotePath = DriveProfile.NormalizeRemotePath(dPath.Text, p.Remote);
                 p.DriveLetter = NormalizeDriveChoice(Convert.ToString(dDrive.SelectedItem ?? dDrive.Text ?? "AUTO"));
                 p.CacheMode = Convert.ToString(dCacheMode.SelectedItem ?? dCacheMode.Text ?? "full").Trim();
                 p.CacheDir = dCacheDir.Text.Trim();
@@ -1584,7 +1611,7 @@ namespace RcloneDriveManager
             {
                 Name = string.IsNullOrWhiteSpace(nameBox.Text) ? remote.TrimEnd(':') : nameBox.Text.Trim(),
                 Remote = remote,
-                RemotePath = string.IsNullOrWhiteSpace(pathBox.Text) ? "/" : pathBox.Text.Trim(),
+                RemotePath = DriveProfile.NormalizeRemotePath(pathBox.Text, remote),
                 DriveLetter = NormalizeDriveChoice(Convert.ToString(driveCombo.SelectedItem ?? driveCombo.Text ?? "AUTO")),
                 CacheMode = Convert.ToString(cacheModeCombo.SelectedItem ?? "full"),
                 CacheDir = cacheDirBox.Text.Trim(),
@@ -1740,11 +1767,23 @@ namespace RcloneDriveManager
             }
             if (result.ExitCode != 0)
             {
-                AddLog("Remote chưa sẵn sàng hoặc sai đăng nhập. Không mount. Exit code: " + result.ExitCode, "ERROR");
+                AddLog(PreflightErrorMessage(result.Output, result.ExitCode), "ERROR");
                 return false;
             }
             AddLog("Remote OK, bắt đầu mount.");
             return true;
+        }
+
+        private string PreflightErrorMessage(string output, int exitCode)
+        {
+            var text = output ?? "";
+            if (text.IndexOf("Too many connections", StringComparison.OrdinalIgnoreCase) >= 0 || text.IndexOf("421", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "FTP server đang giới hạn quá nhiều kết nối từ IP này. Hãy ngắt các ổ/phiên FTP cũ, đợi vài phút rồi thử lại. Không mount. Exit code: " + exitCode;
+            if (text.IndexOf("Login authentication failed", StringComparison.OrdinalIgnoreCase) >= 0 || text.IndexOf("530", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "Sai user/pass hoặc tài khoản FTP không được phép đăng nhập. Không mount. Exit code: " + exitCode;
+            if (text.IndexOf("directory not found", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "Đường dẫn remote không tồn tại. Với rclone hãy nhập dạng /thu-muc, không nhập \\\\server\\share. Không mount. Exit code: " + exitCode;
+            return "Remote chưa sẵn sàng. Không mount. Exit code: " + exitCode;
         }
 
         private void UnmountSelected()
@@ -2305,7 +2344,7 @@ namespace RcloneDriveManager
                 return;
             }
 
-            var testPath = string.IsNullOrWhiteSpace(configTestPathBox.Text) ? "/" : configTestPathBox.Text.Trim();
+            var testPath = DriveProfile.NormalizeRemotePath(configTestPathBox.Text, name + ":");
             AddLog("Testing new remote " + name + ":" + testPath);
             var test = await RunCaptureAsync("lsd", name + ":" + testPath);
             configCheckLabel.Text = test.IndexOf("Failed", StringComparison.OrdinalIgnoreCase) >= 0 ? "Created, test warning" : "Created OK";
@@ -2417,8 +2456,8 @@ namespace RcloneDriveManager
         private string RemotePath(ComboBox remote, TextBox path)
         {
             var r = Convert.ToString(remote.SelectedItem ?? "");
-            var p = string.IsNullOrWhiteSpace(path.Text) ? "/" : path.Text.Trim();
-            return r + p;
+            var p = DriveProfile.NormalizeRemotePath(path.Text, r);
+            return DriveProfile.BuildSource(r, p);
         }
 
         private Task<string> RunCaptureAsync(params string[] args)
