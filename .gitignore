@@ -1,0 +1,25 @@
+# Runtime binaries and caches
+rclone.exe
+*.log
+*.tmp
+__pycache__/
+
+# Old prototypes / local screenshots
+rclone-ui.*
+rclone-gui.bat
+rclone-ui-screenshot.png
+RcloneDrive-screenshot.png
+RcloneDrive-redesign-screenshot.png
+8e3d6fcc-*_RcloneDrive.exe
+RcloneDriveManager/RcloneDrive-old.ico
+
+# Generated per-remote scripts from local configs
+mount-*.bat
+unmount-*.bat
+!unmount-rclone-drive.bat
+add-startup.bat
+remove-startup.bat
+
+# Local folders
+tcc/
+Auto
