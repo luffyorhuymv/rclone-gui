@@ -264,7 +264,7 @@ namespace RcloneDriveManager
 
             var header = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = _surface, Padding = new Padding(18, 12, 18, 10), ColumnCount = 2, RowCount = 1 };
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 760));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 880));
             root.Controls.Add(header, 0, 0);
             root.SetColumnSpan(header, 3);
 
@@ -276,6 +276,7 @@ namespace RcloneDriveManager
             header.Controls.Add(titleBlock, 0, 0);
 
             var headerActions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, BackColor = _surface, Padding = new Padding(0, 8, 0, 0) };
+            headerActions.Controls.Add(ActionButton("Web UI", (s, e) => StartWebUi(), _surface, _text, 92));
             headerActions.Controls.Add(ActionButton("Thêm config", (s, e) => SelectTab("Thêm config"), _surface, _text, 120));
             headerActions.Controls.Add(ActionButton("Quét ổ", (s, e) => RefreshMountedDriveList(), _surface, _text, 88));
             headerActions.Controls.Add(ActionButton("Làm mới", async (s, e) => await RefreshAllAsync(), _surface, _text, 104));
@@ -358,6 +359,7 @@ namespace RcloneDriveManager
             actions.Controls.Add(ActionButton("Ngắt", (s, e) => UnmountSelected(), _surface, _danger, 96));
             actions.Controls.Add(ActionButton("Mở ổ", (s, e) => OpenSelectedDrive(), _surface, _text, 96));
             actions.Controls.Add(ActionButton("Lưu", (s, e) => SaveCurrentProfile(), _surface, _text, 86));
+            actions.Controls.Add(ActionButton("Web UI", (s, e) => StartWebUi(), _surface, _text, 96));
             actions.Controls.Add(ActionButton("Cache", (s, e) => BrowseCacheDirForSelectedProfile(), _surface, _text, 96));
             actions.Controls.Add(ActionButton("Code IDE", (s, e) => ApplyCodeIdePreset(), _surface, _text, 104));
             pageLayout.Controls.Add(actions, 0, 0);
