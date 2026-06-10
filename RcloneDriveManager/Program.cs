@@ -514,12 +514,13 @@ namespace RcloneDriveManager
         private TabPage BuildToolsTab()
         {
             var page = new TabPage("Công cụ") { BackColor = _surface, Padding = new Padding(22) };
-            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1, BackColor = _surface };
+            page.AutoScroll = true;
+            var layout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, RowCount = 5, ColumnCount = 1, BackColor = _surface };
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 154));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
             page.Controls.Add(layout);
 
             layout.Controls.Add(new Label { Text = "Công cụ", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 13F, FontStyle.Bold), ForeColor = _text, TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
@@ -569,7 +570,7 @@ namespace RcloneDriveManager
                 BackColor = _surface,
                 FlowDirection = FlowDirection.LeftToRight,
                 WrapContents = true,
-                Padding = new Padding(0, 28, 0, 0),
+                Padding = new Padding(0, 8, 0, 6),
                 Margin = new Padding(0, 0, 0, 8)
             };
             panel.Controls.Add(new Label
