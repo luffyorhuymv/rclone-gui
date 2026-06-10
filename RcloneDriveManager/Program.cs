@@ -166,7 +166,7 @@ namespace RcloneDriveManager
 
     public sealed class MainForm : Form
     {
-        private const string AppUpdateUrl = "https://raw.githubusercontent.com/luffyorhuymv/rclone-gui/main/RcloneDrive.exe";
+        private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
         private readonly string[] _args;
         private readonly string _appDir;
         private readonly string _rcloneExe;
@@ -1059,11 +1059,12 @@ namespace RcloneDriveManager
                 var tempRoot = Path.Combine(Path.GetTempPath(), "RcloneDriveManager", "Update-" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(tempRoot);
                 var newExe = Path.Combine(tempRoot, "RcloneDrive.exe");
+                var updateUrl = await GetLatestAppExeUrlAsync();
 
                 using (var client = new WebClient())
                 {
                     client.Headers.Add("User-Agent", "RcloneDriveManager");
-                    await client.DownloadFileTaskAsync(new Uri(AppUpdateUrl), newExe);
+                    await client.DownloadFileTaskAsync(new Uri(updateUrl), newExe);
                 }
 
                 if (new FileInfo(newExe).Length < 50000)
@@ -1111,6 +1112,20 @@ namespace RcloneDriveManager
             using (var sha = SHA256.Create())
             using (var stream = File.OpenRead(file))
                 return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "");
+        }
+
+        private async Task<string> GetLatestAppExeUrlAsync()
+        {
+            using (var client = new WebClient())
+            {
+                client.Headers.Add("User-Agent", "RcloneDriveManager");
+                var json = await client.DownloadStringTaskAsync(AppUpdateCommitApiUrl);
+                var data = _json.DeserializeObject(json) as Dictionary<string, object>;
+                var sha = Convert.ToString(data != null && data.ContainsKey("sha") ? data["sha"] : "");
+                if (string.IsNullOrWhiteSpace(sha))
+                    throw new InvalidOperationException("Không lấy được commit mới nhất từ GitHub.");
+                return "https://raw.githubusercontent.com/luffyorhuymv/rclone-gui/" + sha + "/RcloneDrive.exe";
+            }
         }
 
         private void StartSelfUpdater(string newExe, string tempRoot)
