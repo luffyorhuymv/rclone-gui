@@ -542,6 +542,7 @@ namespace RcloneDriveManager
             var systemActions = ToolGroup("Hệ thống");
             systemActions.Controls.Add(ActionButton("Quét ổ", (s, e) => RefreshMountedDriveList(), _surface, _text, 88));
             systemActions.Controls.Add(ActionButton("Làm mới", async (s, e) => await RefreshAllAsync(), _surface, _text, 104));
+            systemActions.Controls.Add(ActionButton("WinFsp", (s, e) => OpenWinFspDownload(), _surface, _text, 92));
             systemActions.Controls.Add(ActionButton("Startup ON", (s, e) => SetStartup(true), _surface, _text, 112));
             systemActions.Controls.Add(ActionButton("Startup OFF", (s, e) => SetStartup(false), _surface, _danger, 116));
             layout.Controls.Add(systemActions, 0, 4);
@@ -832,13 +833,43 @@ namespace RcloneDriveManager
             {
             }
 
+            if (!IsWinFspInstalled())
+                AddLog("Chưa phát hiện WinFsp. Mount rclone trên Windows cần WinFsp để tạo ổ đĩa.", "WARN");
+        }
+
+        private bool IsWinFspInstalled()
+        {
             var winfspPaths = new[]
             {
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "WinFsp", "bin", "winfsp-x64.dll"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WinFsp", "bin", "winfsp-x64.dll")
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WinFsp", "bin", "winfsp-x64.dll"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "winfsp-x64.dll")
             };
-            if (!winfspPaths.Any(File.Exists))
-                AddLog("Chưa phát hiện WinFsp. Mount rclone trên Windows cần WinFsp để tạo ổ đĩa.", "WARN");
+            if (winfspPaths.Any(File.Exists)) return true;
+            try
+            {
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WinFsp"))
+                    if (key != null) return true;
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\WinFsp"))
+                    return key != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void OpenWinFspDownload()
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo("https://winfsp.dev/rel/") { UseShellExecute = true });
+                AddLog("Đã mở trang tải WinFsp: https://winfsp.dev/rel/");
+            }
+            catch (Exception ex)
+            {
+                AddLog("Không mở được trang tải WinFsp: " + ex.Message, "ERROR");
+            }
         }
 
         private async Task EnsureRcloneAvailableAsync()
@@ -1932,6 +1963,13 @@ namespace RcloneDriveManager
             if (IsMountedProfile(p))
             {
                 AddLog(DriveDisplay(p) + " is already mounted.", "WARN");
+                return;
+            }
+            if (!IsWinFspInstalled())
+            {
+                AddLog("Thiếu WinFsp nên không thể mount ổ Windows. Cài WinFsp rồi mở lại app.", "ERROR");
+                if (MessageBox.Show("Máy chưa có WinFsp nên rclone không tạo được ổ đĩa.\r\n\r\nMở trang tải WinFsp bây giờ?", "Thiếu WinFsp", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+                    OpenWinFspDownload();
                 return;
             }
 
