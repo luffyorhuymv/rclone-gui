@@ -1589,15 +1589,15 @@ namespace RcloneDriveManager
         private void ApplyCodeIdePreset()
         {
             SelectComboValue(cacheModeCombo, "full");
-            cacheMaxAgeBox.Text = "72h";
-            writeBackBox.Text = "5s";
-            transfersBox.Value = Math.Max(transfersBox.Minimum, Math.Min(transfersBox.Maximum, 4));
-            bufferBox.Value = Math.Max(bufferBox.Minimum, Math.Min(bufferBox.Maximum, 32));
+            cacheMaxAgeBox.Text = "24h";
+            writeBackBox.Text = "2s";
+            transfersBox.Value = Math.Max(transfersBox.Minimum, Math.Min(transfersBox.Maximum, 2));
+            bufferBox.Value = Math.Max(bufferBox.Minimum, Math.Min(bufferBox.Maximum, 16));
             networkModeBox.Checked = true;
             readOnlyBox.Checked = false;
 
             SaveCurrentProfile();
-            AddLog("ÄÃ£ Ã¡p dá»¥ng preset Code IDE: cache full, giá»¯ cache 72h, tá»± upload sau 5s.");
+            AddLog("ÄÃ£ Ã¡p dá»¥ng preset Code IDE/live: cache full, dir cache ngáº¯n, tá»± upload sau 2s.");
         }
 
         private void NewProfile()
@@ -2394,24 +2394,72 @@ namespace RcloneDriveManager
             args.Add("--volname");
             args.Add(volumeName);
             args.Add("--dir-cache-time");
-            args.Add("1m");
+            args.Add(GetDirCacheTime(remoteType));
+            args.Add("--attr-timeout");
+            args.Add(GetAttrTimeout(remoteType));
             args.Add("--buffer-size");
-            args.Add(Math.Max(1, p.BufferSizeMb) + "M");
+            args.Add(GetBufferSizeMb(p, remoteType) + "M");
             args.Add("--transfers");
-            args.Add(string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase)
-                ? Math.Min(2, Math.Max(1, p.Transfers)).ToString()
-                : Math.Max(1, p.Transfers).ToString());
+            args.Add(GetTransferCount(p, remoteType).ToString());
+            ApplyLiveEditArgs(args, p, remoteType);
             ApplyFtpSafeMountArgs(args, p, remoteType);
             AddExtraArgs(args, p.ExtraArgs);
             args.Add("-v");
             return args;
         }
 
+        private string GetDirCacheTime(string remoteType)
+        {
+            if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase))
+                return "10s";
+            if (string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
+                return "15s";
+            return "30s";
+        }
+
+        private string GetAttrTimeout(string remoteType)
+        {
+            if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
+                return "1s";
+            return "5s";
+        }
+
+        private int GetBufferSizeMb(DriveProfile p, string remoteType)
+        {
+            var requested = Math.Max(1, p.BufferSizeMb);
+            if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase))
+                return Math.Min(8, requested);
+            if (string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
+                return Math.Min(16, requested);
+            return requested;
+        }
+
+        private int GetTransferCount(DriveProfile p, string remoteType)
+        {
+            var requested = Math.Max(1, p.Transfers);
+            if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase))
+                return 1;
+            if (string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
+                return Math.Min(2, requested);
+            return requested;
+        }
+
+        private void ApplyLiveEditArgs(List<string> args, DriveProfile p, string remoteType)
+        {
+            if (!(string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
+                  string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase)))
+                return;
+
+            AddArgIfMissing(args, p.ExtraArgs, "--use-server-modtime", null);
+            AddArgIfMissing(args, p.ExtraArgs, "--daemon-timeout", "15m");
+        }
+
         private void ApplyFtpSafeMountArgs(List<string> args, DriveProfile p, string remoteType)
         {
             if (!string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase)) return;
 
-            AddLog("Ãp dá»¥ng preset á»•n Ä‘á»‹nh cho FTP: transfers tháº¥p, retries cao, bá» qua .ftpquota.");
+            AddLog("Ãp dá»¥ng preset FTP cho sá»­a live: cache metadata ngáº¯n, transfers tháº¥p, retries cao, bá» qua .ftpquota.");
             AddArgIfMissing(args, p.ExtraArgs, "--checkers", "1");
             AddArgIfMissing(args, p.ExtraArgs, "--retries", "6");
             AddArgIfMissing(args, p.ExtraArgs, "--low-level-retries", "20");
@@ -2431,7 +2479,8 @@ namespace RcloneDriveManager
         {
             if (HasExtraArg(extra, name)) return;
             args.Add(name);
-            args.Add(value);
+            if (!string.IsNullOrWhiteSpace(value))
+                args.Add(value);
         }
 
         private async Task<bool> TestRemoteBeforeMountAsync(string source)
