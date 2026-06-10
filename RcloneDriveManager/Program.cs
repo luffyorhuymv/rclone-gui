@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -239,7 +239,7 @@ namespace RcloneDriveManager
             _dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RcloneDriveManager");
             _profilesFile = Path.Combine(_dataDir, "profiles.json");
 
-            Text = "TrÃ¬nh quáº£n lÃ½ á»• Rclone";
+            Text = "Trình quản lý ổ Rclone";
             Width = 1420;
             Height = 840;
             MinimumSize = new Size(1280, 760);
@@ -286,15 +286,15 @@ namespace RcloneDriveManager
             var titleBlock = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _surface };
             titleBlock.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
             titleBlock.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
-            titleBlock.Controls.Add(new Label { Text = "TrÃ¬nh quáº£n lÃ½ á»• Rclone", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 15F, FontStyle.Bold), ForeColor = _text, TextAlign = ContentAlignment.BottomLeft }, 0, 0);
-            titleBlock.Controls.Add(new Label { Text = "Káº¿t ná»‘i, mount, duyá»‡t file vÃ  quáº£n lÃ½ config rclone", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9F), ForeColor = _muted, TextAlign = ContentAlignment.TopLeft }, 0, 1);
+            titleBlock.Controls.Add(new Label { Text = "Trình quản lý ổ Rclone", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 15F, FontStyle.Bold), ForeColor = _text, TextAlign = ContentAlignment.BottomLeft }, 0, 0);
+            titleBlock.Controls.Add(new Label { Text = "Kết nối, mount, duyệt file và quản lý config rclone", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9F), ForeColor = _muted, TextAlign = ContentAlignment.TopLeft }, 0, 1);
             header.Controls.Add(titleBlock, 0, 0);
 
             var headerActions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, BackColor = _surface, Padding = new Padding(0, 8, 0, 0) };
             headerActions.Controls.Add(ActionButton("Web UI", (s, e) => StartWebUi(), _surface, _text, 92));
-            headerActions.Controls.Add(ActionButton("LÃ m má»›i", async (s, e) => await RefreshAllAsync(), _surface, _text, 104));
-            headerActions.Controls.Add(ActionButton("Ngáº¯t", (s, e) => UnmountSelected(), _surface, _danger, 86));
-            headerActions.Controls.Add(ActionButton("Káº¿t ná»‘i", async (s, e) => await MountSelectedAsync(), _primary, Color.White, 112));
+            headerActions.Controls.Add(ActionButton("Làm mới", async (s, e) => await RefreshAllAsync(), _surface, _text, 104));
+            headerActions.Controls.Add(ActionButton("Ngắt", (s, e) => UnmountSelected(), _surface, _danger, 86));
+            headerActions.Controls.Add(ActionButton("Kết nối", async (s, e) => await MountSelectedAsync(), _primary, Color.White, 112));
             header.Controls.Add(headerActions, 1, 0);
 
             var left = new Panel { Dock = DockStyle.Fill, BackColor = _surface, Padding = new Padding(18, 18, 14, 18) };
@@ -308,15 +308,15 @@ namespace RcloneDriveManager
             var driveListTitle = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _surface };
             driveListTitle.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
             driveListTitle.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
-            driveListTitle.Controls.Add(new Label { Text = "á»” Ä‘Ã£ cáº¥u hÃ¬nh", Font = new Font("Segoe UI", 13F, FontStyle.Bold), ForeColor = _text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomLeft }, 0, 0);
-            driveListTitle.Controls.Add(new Label { Text = "Profile vÃ  á»• rclone Ä‘ang mount", Font = new Font("Segoe UI", 8.5F), ForeColor = _muted, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopLeft }, 0, 1);
+            driveListTitle.Controls.Add(new Label { Text = "Ổ đã cấu hình", Font = new Font("Segoe UI", 13F, FontStyle.Bold), ForeColor = _text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomLeft }, 0, 0);
+            driveListTitle.Controls.Add(new Label { Text = "Profile và ổ rclone đang mount", Font = new Font("Segoe UI", 8.5F), ForeColor = _muted, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopLeft }, 0, 1);
             leftLayout.Controls.Add(driveListTitle, 0, 0);
 
             profileList = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, HideSelection = false, BorderStyle = BorderStyle.FixedSingle, BackColor = Color.FromArgb(248, 250, 252), ForeColor = _text, Font = new Font("Segoe UI", 9F) };
-            profileList.Columns.Add("TÃªn á»•", 142);
-            profileList.Columns.Add("á»”", 52);
-            profileList.Columns.Add("Tráº¡ng thÃ¡i", 82);
-            profileList.Columns.Add("Nguá»“n", 116);
+            profileList.Columns.Add("Tên ổ", 142);
+            profileList.Columns.Add("Ổ", 52);
+            profileList.Columns.Add("Trạng thái", 82);
+            profileList.Columns.Add("Nguồn", 116);
             profileList.SelectedIndexChanged += (s, e) => LoadSelectedProfileIntoFields();
             leftLayout.Controls.Add(profileList, 0, 1);
 
@@ -326,11 +326,11 @@ namespace RcloneDriveManager
             leftActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
             leftActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
             leftActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-            leftActions.Controls.Add(ActionButton("Má»›i", (s, e) => NewProfile(), _surface, _text, 142), 0, 0);
-            leftActions.Controls.Add(ActionButton("LÆ°u", (s, e) => SaveCurrentProfile(), _primary, Color.White, 142), 1, 0);
-            leftActions.Controls.Add(ActionButton("CÃ i Ä‘áº·t", (s, e) => OpenDriveSettingsDialog(), _surface, _text, 142), 0, 1);
-            leftActions.Controls.Add(ActionButton("XÃ³a", (s, e) => DeleteCurrentProfile(), _surface, _danger, 142), 1, 1);
-            statusLabel = new Label { Text = "Sáºµn sÃ ng", Dock = DockStyle.Fill, ForeColor = _muted, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(4, 0, 0, 0) };
+            leftActions.Controls.Add(ActionButton("Mới", (s, e) => NewProfile(), _surface, _text, 142), 0, 0);
+            leftActions.Controls.Add(ActionButton("Lưu", (s, e) => SaveCurrentProfile(), _primary, Color.White, 142), 1, 0);
+            leftActions.Controls.Add(ActionButton("Cài đặt", (s, e) => OpenDriveSettingsDialog(), _surface, _text, 142), 0, 1);
+            leftActions.Controls.Add(ActionButton("Xóa", (s, e) => DeleteCurrentProfile(), _surface, _danger, 142), 1, 1);
+            statusLabel = new Label { Text = "Sẵn sàng", Dock = DockStyle.Fill, ForeColor = _muted, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(4, 0, 0, 0) };
             leftActions.Controls.Add(statusLabel, 0, 2);
             leftActions.SetColumnSpan(statusLabel, 2);
             leftLayout.Controls.Add(leftActions, 0, 2);
@@ -365,7 +365,7 @@ namespace RcloneDriveManager
 
         private TabPage BuildDriveTab()
         {
-            var page = new TabPage("á»” Ä‘Ä©a") { BackColor = _surface, Padding = new Padding(18) };
+            var page = new TabPage("Ổ đĩa") { BackColor = _surface, Padding = new Padding(18) };
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, BackColor = _surface };
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
@@ -377,30 +377,30 @@ namespace RcloneDriveManager
             actionBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
             actionBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
 
-            var connectGroup = CompactButtonGroup("Káº¿t ná»‘i");
-            connectGroup.Controls.Add(ActionButton("Káº¿t ná»‘i", async (s, e) => await MountSelectedAsync(), _primary, Color.White, 124));
-            connectGroup.Controls.Add(ActionButton("Ngáº¯t", (s, e) => UnmountSelected(), _surface, _danger, 96));
-            connectGroup.Controls.Add(ActionButton("Má»Ÿ á»•", (s, e) => OpenSelectedDrive(), _surface, _text, 96));
+            var connectGroup = CompactButtonGroup("Kết nối");
+            connectGroup.Controls.Add(ActionButton("Kết nối", async (s, e) => await MountSelectedAsync(), _primary, Color.White, 124));
+            connectGroup.Controls.Add(ActionButton("Ngắt", (s, e) => UnmountSelected(), _surface, _danger, 96));
+            connectGroup.Controls.Add(ActionButton("Mở ổ", (s, e) => OpenSelectedDrive(), _surface, _text, 96));
             actionBar.Controls.Add(connectGroup, 0, 0);
 
             var profileGroup = CompactButtonGroup("Profile");
-            profileGroup.Controls.Add(ActionButton("LÆ°u", (s, e) => SaveCurrentProfile(), _surface, _text, 86));
-            profileGroup.Controls.Add(ActionButton("CÃ i Ä‘áº·t", (s, e) => OpenDriveSettingsDialog(), _surface, _text, 96));
+            profileGroup.Controls.Add(ActionButton("Lưu", (s, e) => SaveCurrentProfile(), _surface, _text, 86));
+            profileGroup.Controls.Add(ActionButton("Cài đặt", (s, e) => OpenDriveSettingsDialog(), _surface, _text, 96));
             profileGroup.Controls.Add(ActionButton("Code IDE", (s, e) => ApplyCodeIdePreset(), _surface, _text, 104));
             actionBar.Controls.Add(profileGroup, 0, 1);
 
-            var toolGroup = CompactButtonGroup("CÃ´ng cá»¥");
+            var toolGroup = CompactButtonGroup("Công cụ");
             toolGroup.Controls.Add(ActionButton("Web UI", (s, e) => StartWebUi(), _surface, _text, 96));
             toolGroup.Controls.Add(ActionButton("Cache", (s, e) => BrowseCacheDirForSelectedProfile(), _surface, _text, 96));
-            toolGroup.Controls.Add(ActionButton("Dá»n cache", (s, e) => ClearCacheForSelectedProfile(), _surface, _danger, 112));
-            toolGroup.Controls.Add(ActionButton("Táº£i vá» mÃ¡y", async (s, e) => await DownloadRemoteToLocalAsync(), _surface, _text, 112));
-            toolGroup.Controls.Add(ActionButton("Äáº©y lÃªn host", async (s, e) => await UploadLocalChangesAsync(), _primary, Color.White, 112));
-            toolGroup.Controls.Add(ActionButton("Má»Ÿ local", (s, e) => OpenLocalWorkspace(), _surface, _text, 96));
+            toolGroup.Controls.Add(ActionButton("Dọn cache", (s, e) => ClearCacheForSelectedProfile(), _surface, _danger, 112));
+            toolGroup.Controls.Add(ActionButton("Tải về máy", async (s, e) => await DownloadRemoteToLocalAsync(), _surface, _text, 112));
+            toolGroup.Controls.Add(ActionButton("Đẩy lên host", async (s, e) => await UploadLocalChangesAsync(), _primary, Color.White, 112));
+            toolGroup.Controls.Add(ActionButton("Mở local", (s, e) => OpenLocalWorkspace(), _surface, _text, 96));
             actionBar.Controls.Add(toolGroup, 0, 2);
             pageLayout.Controls.Add(actionBar, 0, 0);
             var checks = new FlowLayoutPanel { Dock = DockStyle.Fill, Height = 46, Padding = new Padding(0, 6, 0, 4), BackColor = _surface };
-            readOnlyBox = new CheckBox { Text = "Chá»‰ Ä‘á»c", Width = 100 };
-            autoMountBox = new CheckBox { Text = "Tá»± mount khi má»Ÿ app", Width = 190 };
+            readOnlyBox = new CheckBox { Text = "Chỉ đọc", Width = 100 };
+            autoMountBox = new CheckBox { Text = "Tự mount khi mở app", Width = 190 };
             networkModeBox = new CheckBox { Text = "Network mode", Width = 140, Checked = true };
             checks.Controls.Add(readOnlyBox);
             checks.Controls.Add(autoMountBox);
@@ -418,7 +418,7 @@ namespace RcloneDriveManager
             panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             pageLayout.Controls.Add(panel, 0, 2);
 
-            nameBox = AddText(panel, "TÃªn profile", "á»” má»›i", 0, 0);
+            nameBox = AddText(panel, "Tên profile", "Ổ mới", 0, 0);
             nameBox.TextChanged += (s, e) =>
             {
                 if (!_loadingProfileFields && !_changingProfileNameAutomatically)
@@ -426,18 +426,18 @@ namespace RcloneDriveManager
             };
             remoteCombo = AddCombo(panel, "Remote", 1, 0);
             remoteCombo.SelectedIndexChanged += (s, e) => AutoNameFromSelectedRemote();
-            pathBox = AddText(panel, "ÄÆ°á»ng dáº«n remote", "/", 0, 1);
-            driveCombo = AddCombo(panel, "KÃ½ tá»± á»• Ä‘Ä©a", 1, 1);
-            cacheModeCombo = AddCombo(panel, "Cháº¿ Ä‘á»™ VFS cache", 0, 2);
+            pathBox = AddText(panel, "Đường dẫn remote", "/", 0, 1);
+            driveCombo = AddCombo(panel, "Ký tự ổ đĩa", 1, 1);
+            cacheModeCombo = AddCombo(panel, "Chế độ VFS cache", 0, 2);
             cacheModeCombo.Items.AddRange(new object[] { "off", "minimal", "writes", "full" });
             cacheModeCombo.SelectedItem = "full";
-            cacheDirBox = AddText(panel, "ThÆ° má»¥c cache", "%USERPROFILE%\\.cache\\rclone", 1, 2);
+            cacheDirBox = AddText(panel, "Thư mục cache", "%USERPROFILE%\\.cache\\rclone", 1, 2);
             transfersBox = AddNumber(panel, "Transfers", 4, 1, 64, 0, 3);
-            bufferBox = AddNumber(panel, "Bá»™ Ä‘á»‡m MB", 32, 1, 1024, 1, 3);
-            cacheMaxAgeBox = AddText(panel, "Giá»¯ cache tá»‘i Ä‘a", "72h", 0, 4);
-            writeBackBox = AddText(panel, "Upload sau khi sá»­a", "5s", 1, 4);
+            bufferBox = AddNumber(panel, "Bộ đệm MB", 32, 1, 1024, 1, 3);
+            cacheMaxAgeBox = AddText(panel, "Giữ cache tối đa", "72h", 0, 4);
+            writeBackBox = AddText(panel, "Upload sau khi sửa", "5s", 1, 4);
             extraArgsBox = new TextBox { Text = "", Height = 54, Multiline = true, ScrollBars = ScrollBars.Vertical };
-            panel.Controls.Add(Wrap("Tham sá»‘ rclone thÃªm", extraArgsBox), 0, 5);
+            panel.Controls.Add(Wrap("Tham số rclone thêm", extraArgsBox), 0, 5);
             panel.SetColumnSpan(extraArgsBox.Parent, 2);
 
             return page;
@@ -445,7 +445,7 @@ namespace RcloneDriveManager
 
         private TabPage BuildBrowserTab()
         {
-            var page = new TabPage("Duyá»‡t file") { BackColor = _surface, Padding = new Padding(22) };
+            var page = new TabPage("Duyệt file") { BackColor = _surface, Padding = new Padding(22) };
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _surface };
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -467,15 +467,15 @@ namespace RcloneDriveManager
             top.Controls.Add(browseRemoteCombo, 1, 0);
             top.Controls.Add(new Label { Text = "Path", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 2, 0);
             top.Controls.Add(browsePathBox, 3, 0);
-            top.Controls.Add(ActionButton("Liá»‡t kÃª", async (s, e) => await BrowseListAsync(), _primary, Color.White, 92), 4, 0);
-            top.Controls.Add(ActionButton("Táº¡o thÆ° má»¥c", async (s, e) => await BrowseMkdirAsync(), _surface, _text, 116), 5, 0);
-            top.Controls.Add(ActionButton("XÃ³a", async (s, e) => await BrowseDeleteAsync(), _surface, _danger, 78), 6, 0);
+            top.Controls.Add(ActionButton("Liệt kê", async (s, e) => await BrowseListAsync(), _primary, Color.White, 92), 4, 0);
+            top.Controls.Add(ActionButton("Tạo thư mục", async (s, e) => await BrowseMkdirAsync(), _surface, _text, 116), 5, 0);
+            top.Controls.Add(ActionButton("Xóa", async (s, e) => await BrowseDeleteAsync(), _surface, _danger, 78), 6, 0);
 
             browserList = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, Font = new Font("Consolas", 9.5F), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.FromArgb(248, 250, 252) };
-            browserList.Columns.Add("Loáº¡i", 82);
-            browserList.Columns.Add("TÃªn", 260);
-            browserList.Columns.Add("KÃ­ch thÆ°á»›c", 110);
-            browserList.Columns.Add("NgÃ y sá»­a", 168);
+            browserList.Columns.Add("Loại", 82);
+            browserList.Columns.Add("Tên", 260);
+            browserList.Columns.Add("Kích thước", 110);
+            browserList.Columns.Add("Ngày sửa", 168);
             browserList.Columns.Add("Path", 360);
             browserList.DoubleClick += async (s, e) => await BrowseOpenSelectedAsync();
             pageLayout.Controls.Add(browserList, 0, 1);
@@ -484,7 +484,7 @@ namespace RcloneDriveManager
 
         private TabPage BuildTransferTab()
         {
-            var page = new TabPage("Truyá»n dá»¯ liá»‡u") { BackColor = _surface, Padding = new Padding(22) };
+            var page = new TabPage("Truyền dữ liệu") { BackColor = _surface, Padding = new Padding(22) };
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _surface };
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 270));
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -495,25 +495,25 @@ namespace RcloneDriveManager
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             pageLayout.Controls.Add(layout, 0, 0);
 
-            transferModeCombo = AddCombo(layout, "Cháº¿ Ä‘á»™", 0, 0);
+            transferModeCombo = AddCombo(layout, "Chế độ", 0, 0);
             transferModeCombo.Items.AddRange(new object[] { "copy", "sync", "move", "check" });
             transferModeCombo.SelectedIndex = 0;
-            dryRunBox = new CheckBox { Text = "Cháº¡y thá»­ trÆ°á»›c", Checked = true, Dock = DockStyle.Fill };
-            layout.Controls.Add(Wrap("An toÃ n", dryRunBox), 1, 0);
-            transferSourceRemoteCombo = AddCombo(layout, "Remote nguá»“n", 0, 1);
-            transferSourcePathBox = AddText(layout, "ÄÆ°á»ng dáº«n nguá»“n", "/", 1, 1);
-            transferDestRemoteCombo = AddCombo(layout, "Remote Ä‘Ã­ch", 0, 2);
-            transferDestPathBox = AddText(layout, "ÄÆ°á»ng dáº«n Ä‘Ã­ch", "/", 1, 2);
+            dryRunBox = new CheckBox { Text = "Chạy thử trước", Checked = true, Dock = DockStyle.Fill };
+            layout.Controls.Add(Wrap("An toàn", dryRunBox), 1, 0);
+            transferSourceRemoteCombo = AddCombo(layout, "Remote nguồn", 0, 1);
+            transferSourcePathBox = AddText(layout, "Đường dẫn nguồn", "/", 1, 1);
+            transferDestRemoteCombo = AddCombo(layout, "Remote đích", 0, 2);
+            transferDestPathBox = AddText(layout, "Đường dẫn đích", "/", 1, 2);
 
             var actions = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 60, Padding = new Padding(0, 12, 0, 0), BackColor = _surface };
-            actions.Controls.Add(ActionButton("Cháº¡y truyá»n", async (s, e) => await RunTransferAsync(), _primary, Color.White, 132));
+            actions.Controls.Add(ActionButton("Chạy truyền", async (s, e) => await RunTransferAsync(), _primary, Color.White, 132));
             pageLayout.Controls.Add(actions, 0, 1);
             return page;
         }
 
         private TabPage BuildToolsTab()
         {
-            var page = new TabPage("CÃ´ng cá»¥") { BackColor = _surface, Padding = new Padding(22) };
+            var page = new TabPage("Công cụ") { BackColor = _surface, Padding = new Padding(22) };
             var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1, BackColor = _surface };
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
@@ -522,39 +522,39 @@ namespace RcloneDriveManager
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             page.Controls.Add(layout);
 
-            layout.Controls.Add(new Label { Text = "CÃ´ng cá»¥", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 13F, FontStyle.Bold), ForeColor = _text, TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
+            layout.Controls.Add(new Label { Text = "Công cụ", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 13F, FontStyle.Bold), ForeColor = _text, TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
 
             var remoteActions = ToolGroup("Remote");
-            remoteActions.Controls.Add(ActionButton("ThÃ´ng tin", async (s, e) => await RunSimpleForSelectedAsync("about"), _surface, _text, 104));
-            remoteActions.Controls.Add(ActionButton("Dung lÆ°á»£ng", async (s, e) => await RunSimpleForSelectedAsync("size"), _surface, _text, 116));
+            remoteActions.Controls.Add(ActionButton("Thông tin", async (s, e) => await RunSimpleForSelectedAsync("about"), _surface, _text, 104));
+            remoteActions.Controls.Add(ActionButton("Dung lượng", async (s, e) => await RunSimpleForSelectedAsync("size"), _surface, _text, 116));
             remoteActions.Controls.Add(ActionButton("Cleanup", async (s, e) => await RunSimpleForSelectedAsync("cleanup"), _surface, _text, 104));
-            remoteActions.Controls.Add(ActionButton("PhiÃªn báº£n", async (s, e) => await RunCaptureAsync("version"), _surface, _text, 104));
+            remoteActions.Controls.Add(ActionButton("Phiên bản", async (s, e) => await RunCaptureAsync("version"), _surface, _text, 104));
             layout.Controls.Add(remoteActions, 0, 1);
 
             var configActions = ToolGroup("Config");
-            configActions.Controls.Add(ActionButton("ThÃªm config", (s, e) => SelectTab("ThÃªm config"), _surface, _text, 124));
-            configActions.Controls.Add(ActionButton("Má»Ÿ wizard", (s, e) => OpenConfig(), _surface, _text, 112));
-            configActions.Controls.Add(ActionButton("Äá»“ng bá»™ config lÃªn", async (s, e) => await SyncConfigUpAsync(), _primary, Color.White, 168));
+            configActions.Controls.Add(ActionButton("Thêm config", (s, e) => SelectTab("Thêm config"), _surface, _text, 124));
+            configActions.Controls.Add(ActionButton("Mở wizard", (s, e) => OpenConfig(), _surface, _text, 112));
+            configActions.Controls.Add(ActionButton("Đồng bộ config lên", async (s, e) => await SyncConfigUpAsync(), _primary, Color.White, 168));
             configActions.Controls.Add(ActionButton("UI web", (s, e) => StartWebUi(), _surface, _text, 92));
             layout.Controls.Add(configActions, 0, 2);
 
             var mountActions = ToolGroup("Mount / BAT");
-            mountActions.Controls.Add(ActionButton("Mount chÆ°a káº¿t ná»‘i", async (s, e) => await MountDisconnectedProfilesAsync(), _surface, _text, 166));
-            mountActions.Controls.Add(ActionButton("Táº¡o BAT mount", (s, e) => CreateBatForSelected(), _surface, _text, 132));
-            mountActions.Controls.Add(ActionButton("Táº¡o BAT ngáº¯t", (s, e) => CreateUnmountBatForSelected(), _surface, _danger, 126));
-            mountActions.Controls.Add(ActionButton("Cache táº¥t cáº£", (s, e) => BrowseCacheDirForAllProfiles(), _surface, _text, 116));
-            mountActions.Controls.Add(ActionButton("Dá»n cache", (s, e) => ClearCacheForSelectedProfile(), _surface, _danger, 112));
-            mountActions.Controls.Add(ActionButton("Dá»n cache táº¥t cáº£", (s, e) => ClearCacheForAllProfiles(), _surface, _danger, 148));
-            mountActions.Controls.Add(ActionButton("Táº£i vá» mÃ¡y", async (s, e) => await DownloadRemoteToLocalAsync(), _surface, _text, 112));
-            mountActions.Controls.Add(ActionButton("Äáº©y lÃªn host", async (s, e) => await UploadLocalChangesAsync(), _primary, Color.White, 112));
-            mountActions.Controls.Add(ActionButton("Má»Ÿ local", (s, e) => OpenLocalWorkspace(), _surface, _text, 96));
+            mountActions.Controls.Add(ActionButton("Mount chưa kết nối", async (s, e) => await MountDisconnectedProfilesAsync(), _surface, _text, 166));
+            mountActions.Controls.Add(ActionButton("Tạo BAT mount", (s, e) => CreateBatForSelected(), _surface, _text, 132));
+            mountActions.Controls.Add(ActionButton("Tạo BAT ngắt", (s, e) => CreateUnmountBatForSelected(), _surface, _danger, 126));
+            mountActions.Controls.Add(ActionButton("Cache tất cả", (s, e) => BrowseCacheDirForAllProfiles(), _surface, _text, 116));
+            mountActions.Controls.Add(ActionButton("Dọn cache", (s, e) => ClearCacheForSelectedProfile(), _surface, _danger, 112));
+            mountActions.Controls.Add(ActionButton("Dọn cache tất cả", (s, e) => ClearCacheForAllProfiles(), _surface, _danger, 148));
+            mountActions.Controls.Add(ActionButton("Tải về máy", async (s, e) => await DownloadRemoteToLocalAsync(), _surface, _text, 112));
+            mountActions.Controls.Add(ActionButton("Đẩy lên host", async (s, e) => await UploadLocalChangesAsync(), _primary, Color.White, 112));
+            mountActions.Controls.Add(ActionButton("Mở local", (s, e) => OpenLocalWorkspace(), _surface, _text, 96));
             layout.Controls.Add(mountActions, 0, 3);
 
-            var systemActions = ToolGroup("Há»‡ thá»‘ng");
-            systemActions.Controls.Add(ActionButton("QuÃ©t á»•", (s, e) => RefreshMountedDriveList(), _surface, _text, 88));
-            systemActions.Controls.Add(ActionButton("LÃ m má»›i", async (s, e) => await RefreshAllAsync(), _surface, _text, 104));
-            systemActions.Controls.Add(ActionButton("Cáº­p nháº­t", async (s, e) => await CheckForAppUpdateAsync(true), _surface, _text, 104));
-            systemActions.Controls.Add(ActionButton("CÃ i WinFsp", async (s, e) => await EnsureWinFspAvailableAsync(true), _surface, _text, 112));
+            var systemActions = ToolGroup("Hệ thống");
+            systemActions.Controls.Add(ActionButton("Quét ổ", (s, e) => RefreshMountedDriveList(), _surface, _text, 88));
+            systemActions.Controls.Add(ActionButton("Làm mới", async (s, e) => await RefreshAllAsync(), _surface, _text, 104));
+            systemActions.Controls.Add(ActionButton("Cập nhật", async (s, e) => await CheckForAppUpdateAsync(true), _surface, _text, 104));
+            systemActions.Controls.Add(ActionButton("Cài WinFsp", async (s, e) => await EnsureWinFspAvailableAsync(true), _surface, _text, 112));
             systemActions.Controls.Add(ActionButton("Startup ON", (s, e) => SetStartup(true), _surface, _text, 112));
             systemActions.Controls.Add(ActionButton("Startup OFF", (s, e) => SetStartup(false), _surface, _danger, 116));
             layout.Controls.Add(systemActions, 0, 4);
@@ -613,7 +613,7 @@ namespace RcloneDriveManager
 
         private TabPage BuildAddConfigTab()
         {
-            var page = new TabPage("ThÃªm config") { BackColor = _surface, Padding = new Padding(22) };
+            var page = new TabPage("Thêm config") { BackColor = _surface, Padding = new Padding(22) };
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, BackColor = _surface };
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 540));
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 66));
@@ -630,29 +630,29 @@ namespace RcloneDriveManager
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             pageLayout.Controls.Add(layout, 0, 0);
 
-            configNameBox = AddText(layout, "TÃªn remote", "", 0, 0);
-            configTypeCombo = AddCombo(layout, "Loáº¡i lÆ°u trá»¯", 1, 0);
+            configNameBox = AddText(layout, "Tên remote", "", 0, 0);
+            configTypeCombo = AddCombo(layout, "Loại lưu trữ", 1, 0);
             configTypeCombo.Items.AddRange(new object[]
             {
                 "drive", "onedrive", "s3", "ftp", "sftp", "webdav", "alias", "local", "dropbox", "box", "mega"
             });
             configTypeCombo.SelectedIndex = 0;
 
-            configTestPathBox = AddText(layout, "ÄÆ°á»ng dáº«n test sau khi táº¡o", "/", 0, 1);
-            configRequireInternetBox = new CheckBox { Text = "Kiá»ƒm tra internet trÆ°á»›c khi táº¡o", Checked = true, Dock = DockStyle.Fill };
-            layout.Controls.Add(Wrap("Kiá»ƒm tra káº¿t ná»‘i", configRequireInternetBox), 1, 1);
+            configTestPathBox = AddText(layout, "Đường dẫn test sau khi tạo", "/", 0, 1);
+            configRequireInternetBox = new CheckBox { Text = "Kiểm tra internet trước khi tạo", Checked = true, Dock = DockStyle.Fill };
+            layout.Controls.Add(Wrap("Kiểm tra kết nối", configRequireInternetBox), 1, 1);
 
             configUserBox = AddText(layout, "User", "", 0, 2);
             configPassBox = AddText(layout, "Password", "", 1, 2);
             configPassBox.UseSystemPasswordChar = true;
-            configObscurePassBox = new CheckBox { Text = "Tá»± mÃ£ hÃ³a password báº±ng rclone obscure", Checked = true, Dock = DockStyle.Fill };
-            layout.Controls.Add(Wrap("TÃ¹y chá»n password", configObscurePassBox), 0, 3);
+            configObscurePassBox = new CheckBox { Text = "Tự mã hóa password bằng rclone obscure", Checked = true, Dock = DockStyle.Fill };
+            layout.Controls.Add(Wrap("Tùy chọn password", configObscurePassBox), 0, 3);
             layout.SetColumnSpan(configObscurePassBox.Parent, 2);
 
             var paramsPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 0, 12, 8), BackColor = _surface };
             paramsPanel.Controls.Add(new Label
             {
-                Text = "Tham sá»‘ config, má»—i dÃ²ng má»™t key=value",
+                Text = "Tham số config, mỗi dòng một key=value",
                 Dock = DockStyle.Top,
                 Height = 22,
                 Font = new Font("Segoe UI", 8.5F, FontStyle.Bold)
@@ -671,10 +671,10 @@ namespace RcloneDriveManager
             layout.SetColumnSpan(paramsPanel, 2);
 
             var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(0, 12, 0, 0), BackColor = _surface };
-            actions.Controls.Add(ActionButton("Kiá»ƒm tra káº¿t ná»‘i", async (s, e) => await CheckConfigConnectionAsync(true), _surface, _text, 162));
-            actions.Controls.Add(ActionButton("ThÃªm config", async (s, e) => await AddConfigFromUiAsync(), _primary, Color.White, 132));
-            actions.Controls.Add(ActionButton("Má»Ÿ wizard", (s, e) => OpenConfig(), _surface, _text, 112));
-            configCheckLabel = new Label { Text = "ChÆ°a kiá»ƒm tra", AutoSize = false, Width = 360, Height = 36, TextAlign = ContentAlignment.MiddleLeft };
+            actions.Controls.Add(ActionButton("Kiểm tra kết nối", async (s, e) => await CheckConfigConnectionAsync(true), _surface, _text, 162));
+            actions.Controls.Add(ActionButton("Thêm config", async (s, e) => await AddConfigFromUiAsync(), _primary, Color.White, 132));
+            actions.Controls.Add(ActionButton("Mở wizard", (s, e) => OpenConfig(), _surface, _text, 112));
+            configCheckLabel = new Label { Text = "Chưa kiểm tra", AutoSize = false, Width = 360, Height = 36, TextAlign = ContentAlignment.MiddleLeft };
             actions.Controls.Add(configCheckLabel);
             pageLayout.Controls.Add(actions, 0, 1);
 
@@ -688,21 +688,21 @@ namespace RcloneDriveManager
                 BorderStyle = BorderStyle.FixedSingle,
                 BackColor = Color.FromArgb(248, 250, 252),
                 Font = new Font("Segoe UI", 9F),
-                Text = "VÃ­ dá»¥:\r\n" +
-                       "SFTP: host=1.2.3.4, user=root, pass=<máº­t kháº©u Ä‘Ã£ rclone obscure>\r\n" +
-                       "FTP: host=ftp.example.com, user=name, pass=<máº­t kháº©u Ä‘Ã£ rclone obscure>\r\n" +
+                Text = "Ví dụ:\r\n" +
+                       "SFTP: host=1.2.3.4, user=root, pass=<mật khẩu đã rclone obscure>\r\n" +
+                       "FTP: host=ftp.example.com, user=name, pass=<mật khẩu đã rclone obscure>\r\n" +
                        "S3: provider=AWS, access_key_id=..., secret_access_key=..., region=...\r\n" +
                        "WebDAV: url=https://example.com/webdav, vendor=other, user=..., pass=...\r\n\r\n" +
-                       "LÆ°u Ã½:\r\n" +
-                       "- User/Password phÃ­a trÃªn sáº½ tá»± ghi thÃ nh user/pass trong rclone config.\r\n" +
-                       "- Náº¿u báº­t mÃ£ hÃ³a password, app cháº¡y rclone obscure trÆ°á»›c khi lÆ°u.\r\n" +
-                       "- KhÃ´ng nháº­p láº¡i user/pass á»Ÿ Ã´ tham sá»‘ náº¿u Ä‘Ã£ nháº­p á»Ÿ Ã´ riÃªng phÃ­a trÃªn.\r\n" +
-                       "- Google Drive/OneDrive cáº§n OAuth, nÃªn dÃ¹ng Má»Ÿ wizard náº¿u chÆ°a cÃ³ token/client params.\r\n" +
-                       "- SFTP/FTP/WebDAV thÆ°á»ng cáº§n host, user, pass.\r\n" +
-                       "- S3 thÆ°á»ng cáº§n provider, access_key_id, secret_access_key, region hoáº·c endpoint.\r\n" +
-                       "- Sau khi thÃªm config, app sáº½ refresh danh sÃ¡ch remote vÃ  táº¡o profile má»›i.\r\n" +
-                       "- Náº¿u kiá»ƒm tra káº¿t ná»‘i bÃ¡o lá»—i, xem log bÃªn pháº£i Ä‘á»ƒ biáº¿t host/ping/rclone lá»—i á»Ÿ Ä‘Ã¢u.\r\n" +
-                       "- CÃ³ thá»ƒ dÃ¹ng nÃºt UI web náº¿u muá»‘n cáº¥u hÃ¬nh giá»‘ng giao diá»‡n web cá»§a rclone."
+                       "Lưu ý:\r\n" +
+                       "- User/Password phía trên sẽ tự ghi thành user/pass trong rclone config.\r\n" +
+                       "- Nếu bật mã hóa password, app chạy rclone obscure trước khi lưu.\r\n" +
+                       "- Không nhập lại user/pass ở ô tham số nếu đã nhập ở ô riêng phía trên.\r\n" +
+                       "- Google Drive/OneDrive cần OAuth, nên dùng Mở wizard nếu chưa có token/client params.\r\n" +
+                       "- SFTP/FTP/WebDAV thường cần host, user, pass.\r\n" +
+                       "- S3 thường cần provider, access_key_id, secret_access_key, region hoặc endpoint.\r\n" +
+                       "- Sau khi thêm config, app sẽ refresh danh sách remote và tạo profile mới.\r\n" +
+                       "- Nếu kiểm tra kết nối báo lỗi, xem log bên phải để biết host/ping/rclone lỗi ở đâu.\r\n" +
+                       "- Có thể dùng nút UI web nếu muốn cấu hình giống giao diện web của rclone."
             };
             pageLayout.Controls.Add(help, 0, 2);
             return page;
@@ -828,7 +828,7 @@ namespace RcloneDriveManager
         {
             if (!File.Exists(_rcloneExe))
             {
-                AddLog("KhÃ´ng tháº¥y rclone.exe trong thÆ° má»¥c app: " + _rcloneExe, "ERROR");
+                AddLog("Không thấy rclone.exe trong thư mục app: " + _rcloneExe, "ERROR");
                 return;
             }
 
@@ -838,7 +838,7 @@ namespace RcloneDriveManager
                 {
                     var principal = new WindowsPrincipal(identity);
                     if (principal.IsInRole(WindowsBuiltInRole.Administrator))
-                        AddLog("App Ä‘ang cháº¡y báº±ng quyá»n Administrator. Náº¿u á»• khÃ´ng hiá»‡n trong This PC thÆ°á»ng, hÃ£y cháº¡y Explorer cÃ¹ng quyá»n hoáº·c má»Ÿ láº¡i app khÃ´ng dÃ¹ng Administrator.", "WARN");
+                        AddLog("App đang chạy bằng quyền Administrator. Nếu ổ không hiện trong This PC thường, hãy chạy Explorer cùng quyền hoặc mở lại app không dùng Administrator.", "WARN");
                 }
             }
             catch
@@ -846,7 +846,7 @@ namespace RcloneDriveManager
             }
 
             if (!IsWinFspInstalled())
-                AddLog("ChÆ°a phÃ¡t hiá»‡n WinFsp. Mount rclone trÃªn Windows cáº§n WinFsp Ä‘á»ƒ táº¡o á»• Ä‘Ä©a.", "WARN");
+                AddLog("Chưa phát hiện WinFsp. Mount rclone trên Windows cần WinFsp để tạo ổ đĩa.", "WARN");
         }
 
         private bool IsWinFspInstalled()
@@ -876,11 +876,11 @@ namespace RcloneDriveManager
             try
             {
                 Process.Start(new ProcessStartInfo("https://winfsp.dev/rel/") { UseShellExecute = true });
-                AddLog("ÄÃ£ má»Ÿ trang táº£i WinFsp: https://winfsp.dev/rel/");
+                AddLog("Đã mở trang tải WinFsp: https://winfsp.dev/rel/");
             }
             catch (Exception ex)
             {
-                AddLog("KhÃ´ng má»Ÿ Ä‘Æ°á»£c trang táº£i WinFsp: " + ex.Message, "ERROR");
+                AddLog("Không mở được trang tải WinFsp: " + ex.Message, "ERROR");
             }
         }
 
@@ -888,29 +888,29 @@ namespace RcloneDriveManager
         {
             if (IsWinFspInstalled())
             {
-                if (showAlreadyInstalled) AddLog("WinFsp Ä‘Ã£ Ä‘Æ°á»£c cÃ i.");
+                if (showAlreadyInstalled) AddLog("WinFsp đã được cài.");
                 return true;
             }
 
             var confirm = MessageBox.Show(
-                "MÃ¡y chÆ°a cÃ³ WinFsp nÃªn rclone khÃ´ng táº¡o Ä‘Æ°á»£c á»• Ä‘Ä©a.\r\n\r\nTáº£i vÃ  cÃ i WinFsp tá»± Ä‘á»™ng bÃ¢y giá»?\r\n\r\nWindows sáº½ hiá»‡n UAC Ä‘á»ƒ cáº¥p quyá»n cÃ i driver.",
-                "CÃ i WinFsp",
+                "Máy chưa có WinFsp nên rclone không tạo được ổ đĩa.\r\n\r\nTải và cài WinFsp tự động bây giờ?\r\n\r\nWindows sẽ hiện UAC để cấp quyền cài driver.",
+                "Cài WinFsp",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question);
             if (confirm != DialogResult.Yes)
             {
-                AddLog("NgÆ°á»i dÃ¹ng bá» qua cÃ i WinFsp.", "WARN");
+                AddLog("Người dùng bỏ qua cài WinFsp.", "WARN");
                 return false;
             }
 
             await DownloadAndInstallWinFspAsync();
             if (IsWinFspInstalled())
             {
-                AddLog("WinFsp Ä‘Ã£ cÃ i xong. CÃ³ thá»ƒ mount á»• rclone.");
+                AddLog("WinFsp đã cài xong. Có thể mount ổ rclone.");
                 return true;
             }
 
-            AddLog("ChÆ°a xÃ¡c nháº­n Ä‘Æ°á»£c WinFsp sau khi cÃ i. Náº¿u installer vá»«a cháº¡y xong, hÃ£y má»Ÿ láº¡i app hoáº·c khá»Ÿi Ä‘á»™ng láº¡i Windows náº¿u cáº§n.", "ERROR");
+            AddLog("Chưa xác nhận được WinFsp sau khi cài. Nếu installer vừa chạy xong, hãy mở lại app hoặc khởi động lại Windows nếu cần.", "ERROR");
             return false;
         }
 
@@ -922,8 +922,8 @@ namespace RcloneDriveManager
             try
             {
                 Directory.CreateDirectory(tempRoot);
-                statusLabel.Text = "Äang táº£i WinFsp...";
-                AddLog("Táº£i WinFsp tá»« " + url);
+                statusLabel.Text = "Đang tải WinFsp...";
+                AddLog("Tải WinFsp từ " + url);
                 ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
                 using (var client = new WebClient())
                 {
@@ -931,8 +931,8 @@ namespace RcloneDriveManager
                     await client.DownloadFileTaskAsync(new Uri(url), msiPath);
                 }
 
-                statusLabel.Text = "Äang cÃ i WinFsp...";
-                AddLog("Cháº¡y installer WinFsp. Windows cÃ³ thá»ƒ há»i quyá»n Administrator.");
+                statusLabel.Text = "Đang cài WinFsp...";
+                AddLog("Chạy installer WinFsp. Windows có thể hỏi quyền Administrator.");
                 var psi = new ProcessStartInfo
                 {
                     FileName = "msiexec.exe",
@@ -948,18 +948,18 @@ namespace RcloneDriveManager
                         AddLog("WinFsp installer exit code: " + proc.ExitCode, proc.ExitCode == 0 ? "INFO" : "WARN");
                     }
                 }
-                statusLabel.Text = "ÄÃ£ cháº¡y cÃ i WinFsp";
+                statusLabel.Text = "Đã chạy cài WinFsp";
             }
             catch (Win32Exception ex)
             {
-                statusLabel.Text = "CÃ i WinFsp bá»‹ há»§y";
-                AddLog("KhÃ´ng cháº¡y Ä‘Æ°á»£c installer WinFsp: " + ex.Message, "ERROR");
+                statusLabel.Text = "Cài WinFsp bị hủy";
+                AddLog("Không chạy được installer WinFsp: " + ex.Message, "ERROR");
             }
             catch (Exception ex)
             {
-                statusLabel.Text = "CÃ i WinFsp lá»—i";
-                AddLog("CÃ i WinFsp tháº¥t báº¡i: " + ex.Message, "ERROR");
-                if (MessageBox.Show("CÃ i WinFsp tá»± Ä‘á»™ng tháº¥t báº¡i:\r\n" + ex.Message + "\r\n\r\nMá»Ÿ trang táº£i thá»§ cÃ´ng?", "CÃ i WinFsp", MessageBoxButtons.YesNo, MessageBoxIcon.Error) == DialogResult.Yes)
+                statusLabel.Text = "Cài WinFsp lỗi";
+                AddLog("Cài WinFsp thất bại: " + ex.Message, "ERROR");
+                if (MessageBox.Show("Cài WinFsp tự động thất bại:\r\n" + ex.Message + "\r\n\r\nMở trang tải thủ công?", "Cài WinFsp", MessageBoxButtons.YesNo, MessageBoxIcon.Error) == DialogResult.Yes)
                     OpenWinFspDownload();
             }
             finally
@@ -996,16 +996,16 @@ namespace RcloneDriveManager
                     }
                 }
             }
-            throw new InvalidOperationException("KhÃ´ng tÃ¬m tháº¥y file MSI WinFsp má»›i nháº¥t trÃªn GitHub release.");
+            throw new InvalidOperationException("Không tìm thấy file MSI WinFsp mới nhất trên GitHub release.");
         }
 
         private async Task EnsureRcloneAvailableAsync()
         {
             if (File.Exists(_rcloneExe)) return;
-            AddLog("KhÃ´ng tháº¥y rclone.exe trong thÆ° má»¥c app.");
+            AddLog("Không thấy rclone.exe trong thư mục app.");
             var confirm = MessageBox.Show(
-                "ChÆ°a cÃ³ rclone.exe cáº¡nh RcloneDrive.exe.\r\n\r\nBáº¡n cÃ³ muá»‘n táº£i rclone báº£n Windows 64-bit má»›i nháº¥t tá»« rclone.org khÃ´ng?",
-                "Táº£i rclone.exe",
+                "Chưa có rclone.exe cạnh RcloneDrive.exe.\r\n\r\nBạn có muốn tải rclone bản Windows 64-bit mới nhất từ rclone.org không?",
+                "Tải rclone.exe",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question);
             if (confirm != DialogResult.Yes) return;
@@ -1022,30 +1022,30 @@ namespace RcloneDriveManager
             {
                 Directory.CreateDirectory(tempRoot);
                 Directory.CreateDirectory(extractDir);
-                statusLabel.Text = "Äang táº£i rclone...";
-                AddLog("Táº£i rclone tá»« " + url);
+                statusLabel.Text = "Đang tải rclone...";
+                AddLog("Tải rclone từ " + url);
                 ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
                 using (var client = new WebClient())
                 {
                     await client.DownloadFileTaskAsync(new Uri(url), zipPath);
                 }
 
-                statusLabel.Text = "Äang giáº£i nÃ©n rclone...";
-                AddLog("Giáº£i nÃ©n rclone...");
+                statusLabel.Text = "Đang giải nén rclone...";
+                AddLog("Giải nén rclone...");
                 ZipFile.ExtractToDirectory(zipPath, extractDir);
                 var extractedExe = Directory.GetFiles(extractDir, "rclone.exe", SearchOption.AllDirectories).FirstOrDefault();
                 if (string.IsNullOrWhiteSpace(extractedExe) || !File.Exists(extractedExe))
-                    throw new FileNotFoundException("KhÃ´ng tÃ¬m tháº¥y rclone.exe trong file zip.");
+                    throw new FileNotFoundException("Không tìm thấy rclone.exe trong file zip.");
 
                 File.Copy(extractedExe, _rcloneExe, true);
-                statusLabel.Text = "ÄÃ£ táº£i rclone";
-                AddLog("ÄÃ£ cÃ i rclone.exe vÃ o: " + _rcloneExe);
+                statusLabel.Text = "Đã tải rclone";
+                AddLog("Đã cài rclone.exe vào: " + _rcloneExe);
             }
             catch (Exception ex)
             {
-                statusLabel.Text = "Táº£i rclone lá»—i";
-                AddLog("Táº£i rclone tháº¥t báº¡i: " + ex.Message, "ERROR");
-                MessageBox.Show("Táº£i rclone tháº¥t báº¡i:\r\n" + ex.Message, "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                statusLabel.Text = "Tải rclone lỗi";
+                AddLog("Tải rclone thất bại: " + ex.Message, "ERROR");
+                MessageBox.Show("Tải rclone thất bại:\r\n" + ex.Message, "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
@@ -1059,11 +1059,11 @@ namespace RcloneDriveManager
             {
                 if (!File.Exists(Application.ExecutablePath))
                 {
-                    if (manual) AddLog("KhÃ´ng tÃ¬m tháº¥y file app hiá»‡n táº¡i Ä‘á»ƒ kiá»ƒm tra cáº­p nháº­t.", "ERROR");
+                    if (manual) AddLog("Không tìm thấy file app hiện tại để kiểm tra cập nhật.", "ERROR");
                     return;
                 }
 
-                if (manual) AddLog("Äang kiá»ƒm tra cáº­p nháº­t app...");
+                if (manual) AddLog("Đang kiểm tra cập nhật app...");
                 var tempRoot = Path.Combine(Path.GetTempPath(), "RcloneDriveManager", "Update-" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(tempRoot);
                 var newExe = Path.Combine(tempRoot, "RcloneDrive.exe");
@@ -1078,7 +1078,7 @@ namespace RcloneDriveManager
                 if (new FileInfo(newExe).Length < 50000)
                 {
                     TryDeleteDirectory(tempRoot);
-                    AddLog("File cáº­p nháº­t táº£i vá» khÃ´ng há»£p lá»‡.", "ERROR");
+                    AddLog("File cập nhật tải về không hợp lệ.", "ERROR");
                     return;
                 }
 
@@ -1087,20 +1087,20 @@ namespace RcloneDriveManager
                 if (string.Equals(currentHash, newHash, StringComparison.OrdinalIgnoreCase))
                 {
                     TryDeleteDirectory(tempRoot);
-                    if (manual) MessageBox.Show("Báº¡n Ä‘ang dÃ¹ng báº£n má»›i nháº¥t.", "Cáº­p nháº­t", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    else AddLog("App Ä‘ang á»Ÿ báº£n má»›i nháº¥t.");
+                    if (manual) MessageBox.Show("Bạn đang dùng bản mới nhất.", "Cập nhật", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    else AddLog("App đang ở bản mới nhất.");
                     return;
                 }
 
                 var confirm = MessageBox.Show(
-                    "CÃ³ báº£n RcloneDrive.exe má»›i trÃªn GitHub.\r\n\r\nCáº­p nháº­t vÃ  má»Ÿ láº¡i app bÃ¢y giá»?",
-                    "Cáº­p nháº­t app",
+                    "Có bản RcloneDrive.exe mới trên GitHub.\r\n\r\nCập nhật và mở lại app bây giờ?",
+                    "Cập nhật app",
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question);
                 if (confirm != DialogResult.Yes)
                 {
                     TryDeleteDirectory(tempRoot);
-                    AddLog("ÄÃ£ bá» qua cáº­p nháº­t app.", "WARN");
+                    AddLog("Đã bỏ qua cập nhật app.", "WARN");
                     return;
                 }
 
@@ -1110,8 +1110,8 @@ namespace RcloneDriveManager
             catch (Exception ex)
             {
                 if (manual)
-                    MessageBox.Show("Kiá»ƒm tra/cáº­p nháº­t app tháº¥t báº¡i:\r\n" + ex.Message, "Cáº­p nháº­t", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                AddLog("Cáº­p nháº­t app tháº¥t báº¡i: " + ex.Message, manual ? "ERROR" : "WARN");
+                    MessageBox.Show("Kiểm tra/cập nhật app thất bại:\r\n" + ex.Message, "Cập nhật", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                AddLog("Cập nhật app thất bại: " + ex.Message, manual ? "ERROR" : "WARN");
             }
         }
 
@@ -1131,7 +1131,7 @@ namespace RcloneDriveManager
                 var data = _json.DeserializeObject(json) as Dictionary<string, object>;
                 var sha = Convert.ToString(data != null && data.ContainsKey("sha") ? data["sha"] : "");
                 if (string.IsNullOrWhiteSpace(sha))
-                    throw new InvalidOperationException("KhÃ´ng láº¥y Ä‘Æ°á»£c commit má»›i nháº¥t tá»« GitHub.");
+                    throw new InvalidOperationException("Không lấy được commit mới nhất từ GitHub.");
                 return "https://raw.githubusercontent.com/luffyorhuymv/rclone-gui/" + sha + "/RcloneDrive.exe";
             }
         }
@@ -1158,7 +1158,7 @@ namespace RcloneDriveManager
                 "exit /b 0"
             };
             File.WriteAllLines(script, lines, Encoding.ASCII);
-            AddLog("Äang cáº­p nháº­t app. App sáº½ Ä‘Ã³ng vÃ  má»Ÿ láº¡i.");
+            AddLog("Đang cập nhật app. App sẽ đóng và mở lại.");
             Process.Start(new ProcessStartInfo
             {
                 FileName = script,
@@ -1190,7 +1190,7 @@ namespace RcloneDriveManager
                 }
             }
             if (_profiles.Count == 0)
-                _profiles.Add(new DriveProfile { Name = "á»” api", Remote = "api:" });
+                _profiles.Add(new DriveProfile { Name = "Ổ api", Remote = "api:" });
             EnsureProfileIds();
             RenderProfiles();
         }
@@ -1226,7 +1226,7 @@ namespace RcloneDriveManager
                 var item = new ListViewItem(p.Name);
                 item.SubItems.Add(DriveDisplay(p));
                 var mounted = IsMountedProfile(p);
-                item.SubItems.Add(mounted ? "Káº¿t ná»‘i" : "Ráº£nh");
+                item.SubItems.Add(mounted ? "Kết nối" : "Rảnh");
                 item.SubItems.Add("Profile");
                 item.BackColor = mounted ? Color.FromArgb(236, 253, 245) : Color.FromArgb(248, 250, 252);
                 item.ForeColor = mounted ? Color.FromArgb(6, 95, 70) : _text;
@@ -1237,7 +1237,7 @@ namespace RcloneDriveManager
             {
                 var item = new ListViewItem(drive.Name);
                 item.SubItems.Add(drive.DriveLetter);
-                item.SubItems.Add("Äang báº­t");
+                item.SubItems.Add("Đang bật");
                 item.SubItems.Add(drive.Provider);
                 item.BackColor = Color.FromArgb(239, 246, 255);
                 item.ForeColor = Color.FromArgb(30, 64, 175);
@@ -1258,8 +1258,8 @@ namespace RcloneDriveManager
             foreach (var drive in _detectedRcloneDrives.Keys.ToList())
                 SetDriveIcon(drive, true);
             RefreshDriveLetters();
-            statusLabel.Text = "ÄÃ£ quÃ©t á»• mount";
-            AddLog("ÄÃ£ quÃ©t láº¡i cÃ¡c á»• rclone/WinFsp Ä‘ang mount.");
+            statusLabel.Text = "Đã quét ổ mount";
+            AddLog("Đã quét lại các ổ rclone/WinFsp đang mount.");
             RefreshExplorer();
         }
 
@@ -1501,7 +1501,7 @@ namespace RcloneDriveManager
                     nameBox.Text = mounted.Name;
                     pathBox.Text = mounted.DisplayRoot;
                     SelectComboValue(driveCombo, mounted.DriveLetter);
-                    statusLabel.Text = "á»” Ä‘ang báº­t sáºµn: " + mounted.DriveLetter;
+                    statusLabel.Text = "Ổ đang bật sẵn: " + mounted.DriveLetter;
                 }
                 return;
             }
@@ -1555,9 +1555,9 @@ namespace RcloneDriveManager
         private bool ShouldAutoReplaceProfileName(string current)
         {
             if (string.IsNullOrWhiteSpace(current)) return true;
-            if (string.Equals(current, "á»” má»›i", StringComparison.OrdinalIgnoreCase)) return true;
-            if (string.Equals(current, "á»” Ä‘Ä©a", StringComparison.OrdinalIgnoreCase)) return true;
-            if (Regex.IsMatch(current, @"^á»”\s+\d+$", RegexOptions.IgnoreCase)) return true;
+            if (string.Equals(current, "Ổ mới", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(current, "Ổ đĩa", StringComparison.OrdinalIgnoreCase)) return true;
+            if (Regex.IsMatch(current, @"^Ổ\s+\d+$", RegexOptions.IgnoreCase)) return true;
             return false;
         }
 
@@ -1565,7 +1565,7 @@ namespace RcloneDriveManager
         {
             var p = SelectedProfile;
             if (p == null) return;
-            p.Name = string.IsNullOrWhiteSpace(nameBox.Text) ? "á»” Ä‘Ä©a" : nameBox.Text.Trim();
+            p.Name = string.IsNullOrWhiteSpace(nameBox.Text) ? "Ổ đĩa" : nameBox.Text.Trim();
             p.Remote = Convert.ToString(remoteCombo.SelectedItem ?? remoteCombo.Text ?? "").Trim();
             p.RemotePath = DriveProfile.NormalizeRemotePath(pathBox.Text, p.Remote);
             p.DriveLetter = NormalizeDriveChoice(Convert.ToString(driveCombo.SelectedItem ?? driveCombo.Text ?? "AUTO"));
@@ -1583,7 +1583,7 @@ namespace RcloneDriveManager
             SaveProfiles();
             RenderProfiles();
             SelectProfile(p);
-            AddLog("ÄÃ£ lÆ°u profile: " + p.Name);
+            AddLog("Đã lưu profile: " + p.Name);
         }
 
         private void ApplyCodeIdePreset()
@@ -1597,7 +1597,7 @@ namespace RcloneDriveManager
             readOnlyBox.Checked = false;
 
             SaveCurrentProfile();
-            AddLog("ÄÃ£ Ã¡p dá»¥ng preset Code IDE/live: cache full, dir cache ngáº¯n, tá»± upload sau 2s.");
+            AddLog("Đã áp dụng preset Code IDE/live: cache full, dir cache ngắn, tự upload sau 2s.");
         }
 
         private void NewProfile()
@@ -1606,7 +1606,7 @@ namespace RcloneDriveManager
             if (string.IsNullOrWhiteSpace(remote))
                 remote = _remotes.FirstOrDefault() ?? "";
             var baseName = string.IsNullOrWhiteSpace(nameBox.Text)
-                ? (string.IsNullOrWhiteSpace(remote) ? "á»”" : remote.TrimEnd(':'))
+                ? (string.IsNullOrWhiteSpace(remote) ? "Ổ" : remote.TrimEnd(':'))
                 : nameBox.Text.Trim();
             var p = new DriveProfile
             {
@@ -1630,12 +1630,12 @@ namespace RcloneDriveManager
             SaveProfiles();
             RenderProfiles();
             SelectProfile(p);
-            AddLog("ÄÃ£ táº¡o profile má»›i: " + p.Name + " dÃ¹ng " + p.Remote + p.RemotePath + " -> " + p.DriveLetter);
+            AddLog("Đã tạo profile mới: " + p.Name + " dùng " + p.Remote + p.RemotePath + " -> " + p.DriveLetter);
         }
 
         private string UniqueProfileName(string baseName)
         {
-            baseName = string.IsNullOrWhiteSpace(baseName) ? "á»”" : baseName.Trim();
+            baseName = string.IsNullOrWhiteSpace(baseName) ? "Ổ" : baseName.Trim();
             if (!_profiles.Any(p => string.Equals(p.Name, baseName, StringComparison.OrdinalIgnoreCase)))
                 return baseName;
             for (var i = 2; i < 1000; i++)
@@ -1653,7 +1653,7 @@ namespace RcloneDriveManager
             if (p == null) return;
             if (IsMountedProfile(p))
             {
-                MessageBox.Show("HÃ£y ngáº¯t káº¿t ná»‘i profile trÆ°á»›c.", "TrÃ¬nh quáº£n lÃ½ á»• Rclone", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Hãy ngắt kết nối profile trước.", "Trình quản lý ổ Rclone", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
             _profiles.Remove(p);
@@ -1667,7 +1667,7 @@ namespace RcloneDriveManager
             var p = SelectedProfile;
             if (p == null)
             {
-                MessageBox.Show("HÃ£y chá»n má»™t profile trÆ°á»›c.", "TrÃ¬nh quáº£n lÃ½ á»• Rclone", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Hãy chọn một profile trước.", "Trình quản lý ổ Rclone", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
             var selected = PickCacheDirectory(p.CacheDir);
@@ -1675,7 +1675,7 @@ namespace RcloneDriveManager
             p.CacheDir = selected;
             cacheDirBox.Text = selected;
             SaveProfiles();
-            AddLog("ÄÃ£ Ä‘áº·t thÆ° má»¥c cache cho " + p.Name + ": " + selected);
+            AddLog("Đã đặt thư mục cache cho " + p.Name + ": " + selected);
         }
 
         private void BrowseCacheDirForAllProfiles()
@@ -1687,14 +1687,14 @@ namespace RcloneDriveManager
             if (cacheDirBox != null) cacheDirBox.Text = selected;
             SaveProfiles();
             RenderProfiles();
-            AddLog("ÄÃ£ Ä‘áº·t thÆ° má»¥c cache cho táº¥t cáº£ á»•: " + selected);
+            AddLog("Đã đặt thư mục cache cho tất cả ổ: " + selected);
         }
 
         private string PickCacheDirectory(string initial)
         {
             using (var dialog = new FolderBrowserDialog())
             {
-                dialog.Description = "Chá»n thÆ° má»¥c cache rclone";
+                dialog.Description = "Chọn thư mục cache rclone";
                 dialog.ShowNewFolderButton = true;
                 var expanded = Environment.ExpandEnvironmentVariables(initial ?? "");
                 if (!string.IsNullOrWhiteSpace(expanded) && Directory.Exists(expanded))
@@ -1720,7 +1720,7 @@ namespace RcloneDriveManager
         private void EnsureLocalWorkspace(DriveProfile p)
         {
             var localDir = NormalizeLocalWorkDir(p);
-            if (string.IsNullOrWhiteSpace(localDir)) throw new InvalidOperationException("Khong xac dinh duoc thu muc local.");
+            if (string.IsNullOrWhiteSpace(localDir)) throw new InvalidOperationException("Không xác định được thư mục local.");
             Directory.CreateDirectory(localDir);
             p.LocalWorkDir = localDir;
             SaveProfiles();
@@ -1736,7 +1736,7 @@ namespace RcloneDriveManager
             }
             EnsureLocalWorkspace(p);
             Process.Start(new ProcessStartInfo("explorer.exe", QuoteIfNeeded(NormalizeLocalWorkDir(p))) { UseShellExecute = true });
-            AddLog("Da mo thu muc local: " + NormalizeLocalWorkDir(p));
+            AddLog("Đã mở thư mục local: " + NormalizeLocalWorkDir(p));
         }
 
         private async Task DownloadRemoteToLocalAsync()
@@ -1749,7 +1749,7 @@ namespace RcloneDriveManager
             }
             EnsureLocalWorkspace(p);
             var localDir = NormalizeLocalWorkDir(p);
-            AddLog("Tai host ve may: " + p.Source + " -> " + localDir);
+            AddLog("Tải host về máy: " + p.Source + " -> " + localDir);
             await RunCaptureAsync("sync", p.Source, localDir, "--progress", "--transfers", "2", "--checkers", "1");
         }
 
@@ -1763,7 +1763,7 @@ namespace RcloneDriveManager
             }
             EnsureLocalWorkspace(p);
             var localDir = NormalizeLocalWorkDir(p);
-            AddLog("Day thay doi len host: " + localDir + " -> " + p.Source);
+            AddLog("Đẩy thay đổi lên host: " + localDir + " -> " + p.Source);
             await RunCaptureAsync("copy", localDir, p.Source, "--progress", "--transfers", "2", "--checkers", "1");
         }
 
@@ -1773,7 +1773,7 @@ namespace RcloneDriveManager
             var p = SelectedProfile;
             if (p == null)
             {
-                MessageBox.Show("Hay chon mot profile truoc.", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Hãy chọn một profile trước.", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
             ClearCacheDirectories(new[] { p.CacheDir }, "profile " + p.Name);
@@ -1785,10 +1785,10 @@ namespace RcloneDriveManager
             var dirs = _profiles.Select(p => p.CacheDir).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             if (dirs.Count == 0)
             {
-                AddLog("Khong co thu muc cache nao de don.", "WARN");
+                AddLog("Không có thư mục cache nào để dọn.", "WARN");
                 return;
             }
-            ClearCacheDirectories(dirs, "tat ca profile");
+            ClearCacheDirectories(dirs, "tất cả profile");
         }
 
         private void ClearCacheDirectories(IEnumerable<string> cacheDirs, string scope)
@@ -1800,12 +1800,12 @@ namespace RcloneDriveManager
                 .ToList();
             if (dirs.Count == 0)
             {
-                AddLog("Chua dat thu muc cache.", "WARN");
+                AddLog("Chưa đặt thư mục cache.", "WARN");
                 return;
             }
 
-            var message = "Don cache cho " + scope + "?\r\n\r\n" + string.Join("\r\n", dirs) + "\r\n\r\nHay ngat o dang mount truoc de tranh xoa file cache dang ghi.";
-            if (MessageBox.Show(message, "Don cache rclone", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+            var message = "Dọn cache cho " + scope + "?\r\n\r\n" + string.Join("\r\n", dirs) + "\r\n\r\nHãy ngắt ổ đang mount trước để tránh xóa file cache đang ghi.";
+            if (MessageBox.Show(message, "Dọn cache rclone", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
                 return;
 
             long freedBytes = 0;
@@ -1814,12 +1814,12 @@ namespace RcloneDriveManager
             {
                 if (!Directory.Exists(dir))
                 {
-                    AddLog("Cache khong ton tai: " + dir, "WARN");
+                    AddLog("Cache không tồn tại: " + dir, "WARN");
                     continue;
                 }
                 if (!IsSafeCacheDir(dir))
                 {
-                    AddLog("Bo qua thu muc cache khong an toan: " + dir, "ERROR");
+                    AddLog("Bỏ qua thư mục cache không an toàn: " + dir, "ERROR");
                     continue;
                 }
 
@@ -1828,9 +1828,9 @@ namespace RcloneDriveManager
                     try { freedBytes += new FileInfo(file).Length; } catch { }
                 }
                 removed += ClearDirectoryContents(dir);
-                AddLog("Da don cache: " + dir);
+                AddLog("Đã dọn cache: " + dir);
             }
-            AddLog("Don cache xong. Da xoa khoang " + FormatBytes(freedBytes) + ", muc da xu ly: " + removed);
+            AddLog("Dọn cache xong. Đã xóa khoảng " + FormatBytes(freedBytes) + ", mục đã xử lý: " + removed);
         }
 
         private string ExpandCacheDir(string path)
@@ -1863,7 +1863,7 @@ namespace RcloneDriveManager
                 }
                 catch (Exception ex)
                 {
-                    AddLog("Khong xoa duoc file cache " + file + ": " + ex.Message, "WARN");
+                    AddLog("Không xóa được file cache " + file + ": " + ex.Message, "WARN");
                 }
             }
             foreach (var subDir in Directory.GetDirectories(dir))
@@ -1875,7 +1875,7 @@ namespace RcloneDriveManager
                 }
                 catch (Exception ex)
                 {
-                    AddLog("Khong xoa duoc thu muc cache " + subDir + ": " + ex.Message, "WARN");
+                    AddLog("Không xóa được thư mục cache " + subDir + ": " + ex.Message, "WARN");
                 }
             }
             return removed;
@@ -1898,13 +1898,13 @@ namespace RcloneDriveManager
             var p = SelectedProfile;
             if (p == null)
             {
-                MessageBox.Show("HÃ£y chá»n má»™t profile á»• trÆ°á»›c.", "TrÃ¬nh quáº£n lÃ½ á»• Rclone", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Hãy chọn một profile ổ trước.", "Trình quản lý ổ Rclone", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
             using (var form = new Form())
             {
-                form.Text = "CÃ i Ä‘áº·t á»• - " + p.Name;
+                form.Text = "Cài đặt ổ - " + p.Name;
                 form.Width = 700;
                 form.Height = 720;
                 form.StartPosition = FormStartPosition.CenterParent;
@@ -1918,13 +1918,13 @@ namespace RcloneDriveManager
                 layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
                 form.Controls.Add(layout);
 
-                var dName = DialogText(layout, "TÃªn profile", p.Name, 0, 0);
+                var dName = DialogText(layout, "Tên profile", p.Name, 0, 0);
                 var dRemote = DialogCombo(layout, "Remote", _remotes, p.Remote, 1, 0, true);
-                var dPath = DialogText(layout, "ÄÆ°á»ng dáº«n remote", p.RemotePath, 0, 1);
-                var dDrive = DialogCombo(layout, "KÃ½ tá»± á»• Ä‘Ä©a", new[] { "Tá»± chá»n á»• trá»‘ng" }.Concat(GetFreeDriveLetters()).Concat(new[] { p.DriveLetter, "Z:", "Y:", "X:", "W:" }).Distinct(StringComparer.OrdinalIgnoreCase), IsAutoDrive(p.DriveLetter) ? "Tá»± chá»n á»• trá»‘ng" : p.DriveLetter, 1, 1, true);
-                var dCacheMode = DialogCombo(layout, "Cháº¿ Ä‘á»™ VFS cache", new[] { "off", "minimal", "writes", "full" }, p.CacheMode, 0, 2, false);
-                var dCacheDir = DialogText(layout, "ThÆ° má»¥c cache", p.CacheDir, 1, 2);
-                var dLocalDir = DialogText(layout, "Thu muc local", NormalizeLocalWorkDir(p), 0, 3);
+                var dPath = DialogText(layout, "Đường dẫn remote", p.RemotePath, 0, 1);
+                var dDrive = DialogCombo(layout, "Ký tự ổ đĩa", new[] { "Tự chọn ổ trống" }.Concat(GetFreeDriveLetters()).Concat(new[] { p.DriveLetter, "Z:", "Y:", "X:", "W:" }).Distinct(StringComparer.OrdinalIgnoreCase), IsAutoDrive(p.DriveLetter) ? "Tự chọn ổ trống" : p.DriveLetter, 1, 1, true);
+                var dCacheMode = DialogCombo(layout, "Chế độ VFS cache", new[] { "off", "minimal", "writes", "full" }, p.CacheMode, 0, 2, false);
+                var dCacheDir = DialogText(layout, "Thư mục cache", p.CacheDir, 1, 2);
+                var dLocalDir = DialogText(layout, "Thư mục local", NormalizeLocalWorkDir(p), 0, 3);
                 var cachePicker = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 38, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(14, 0, 14, 0) };
                 cachePicker.Controls.Add(ActionButton("Browse cache", (s, e) =>
                 {
@@ -1939,15 +1939,15 @@ namespace RcloneDriveManager
                 form.Controls.Add(cachePicker);
                 cachePicker.BringToFront();
                 var dTransfers = DialogNumber(layout, "Transfers", p.Transfers <= 0 ? 4 : p.Transfers, 1, 64, 1, 3);
-                var dBuffer = DialogNumber(layout, "Bo dem MB", p.BufferSizeMb <= 0 ? 32 : p.BufferSizeMb, 1, 1024, 0, 4);
-                var dCacheMaxAge = DialogText(layout, "Giu cache toi da", string.IsNullOrWhiteSpace(p.VfsCacheMaxAge) ? "72h" : p.VfsCacheMaxAge, 1, 4);
-                var dWriteBack = DialogText(layout, "Upload sau khi sua", string.IsNullOrWhiteSpace(p.VfsWriteBack) ? "5s" : p.VfsWriteBack, 0, 5);
-                var dExtra = DialogText(layout, "Tham so rclone them", p.ExtraArgs ?? "", 1, 5);
+                var dBuffer = DialogNumber(layout, "Bộ đệm MB", p.BufferSizeMb <= 0 ? 32 : p.BufferSizeMb, 1, 1024, 0, 4);
+                var dCacheMaxAge = DialogText(layout, "Giữ cache tối đa", string.IsNullOrWhiteSpace(p.VfsCacheMaxAge) ? "72h" : p.VfsCacheMaxAge, 1, 4);
+                var dWriteBack = DialogText(layout, "Upload sau khi sửa", string.IsNullOrWhiteSpace(p.VfsWriteBack) ? "5s" : p.VfsWriteBack, 0, 5);
+                var dExtra = DialogText(layout, "Tham số rclone thêm", p.ExtraArgs ?? "", 1, 5);
                 layout.SetColumnSpan(dExtra.Parent, 2);
 
                 var checks = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 54, Padding = new Padding(14, 8, 14, 4) };
-                var dReadOnly = new CheckBox { Text = "Chá»‰ Ä‘á»c", Width = 90, Checked = p.ReadOnly };
-                var dAuto = new CheckBox { Text = "Tá»± mount khi má»Ÿ app", Width = 180, Checked = p.AutoMount };
+                var dReadOnly = new CheckBox { Text = "Chỉ đọc", Width = 90, Checked = p.ReadOnly };
+                var dAuto = new CheckBox { Text = "Tự mount khi mở app", Width = 180, Checked = p.AutoMount };
                 var dNetwork = new CheckBox { Text = "Network mode", Width = 130, Checked = p.NetworkMode };
                 checks.Controls.Add(dReadOnly);
                 checks.Controls.Add(dAuto);
@@ -1960,14 +1960,14 @@ namespace RcloneDriveManager
                     Dock = DockStyle.Top,
                     Height = 58,
                     Padding = new Padding(14, 8, 14, 0),
-                    Text = "CÃ i Ä‘áº·t nÃ y Ã¡p dá»¥ng cho profile Ä‘ang chá»n. Náº¿u á»• Ä‘ang mount, hÃ£y Ngáº¯t rá»“i Káº¿t ná»‘i láº¡i Ä‘á»ƒ nháº­n cáº¥u hÃ¬nh má»›i."
+                    Text = "Cài đặt này áp dụng cho profile đang chọn. Nếu ổ đang mount, hãy Ngắt rồi Kết nối lại để nhận cấu hình mới."
                 };
                 form.Controls.Add(note);
                 note.BringToFront();
 
                 var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 58, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(14, 10, 14, 10) };
-                var ok = new Button { Text = "LÆ°u", Width = 96, DialogResult = DialogResult.OK };
-                var cancel = new Button { Text = "Há»§y", Width = 96, DialogResult = DialogResult.Cancel };
+                var ok = new Button { Text = "Lưu", Width = 96, DialogResult = DialogResult.OK };
+                var cancel = new Button { Text = "Hủy", Width = 96, DialogResult = DialogResult.Cancel };
                 buttons.Controls.Add(ok);
                 buttons.Controls.Add(cancel);
                 form.Controls.Add(buttons);
@@ -1976,7 +1976,7 @@ namespace RcloneDriveManager
 
                 if (form.ShowDialog(this) != DialogResult.OK) return;
 
-                p.Name = string.IsNullOrWhiteSpace(dName.Text) ? "á»” Ä‘Ä©a" : dName.Text.Trim();
+                p.Name = string.IsNullOrWhiteSpace(dName.Text) ? "Ổ đĩa" : dName.Text.Trim();
                 p.Remote = Convert.ToString(dRemote.SelectedItem ?? dRemote.Text ?? "").Trim();
                 p.RemotePath = DriveProfile.NormalizeRemotePath(dPath.Text, p.Remote);
                 p.DriveLetter = NormalizeDriveChoice(Convert.ToString(dDrive.SelectedItem ?? dDrive.Text ?? "AUTO"));
@@ -1996,7 +1996,7 @@ namespace RcloneDriveManager
                 RenderProfiles();
                 SelectProfile(p);
                 LoadSelectedProfileIntoFields();
-                AddLog("ÄÃ£ cáº­p nháº­t cÃ i Ä‘áº·t á»•: " + p.Name);
+                AddLog("Đã cập nhật cài đặt ổ: " + p.Name);
             }
         }
 
@@ -2091,7 +2091,7 @@ namespace RcloneDriveManager
         {
             var old = Convert.ToString(driveCombo.SelectedItem ?? driveCombo.Text ?? "");
             driveCombo.Items.Clear();
-            driveCombo.Items.Add("Tá»± chá»n á»• trá»‘ng");
+            driveCombo.Items.Add("Tự chọn ổ trống");
             foreach (var d in GetFreeDriveLetters().Concat(new[] { old, "Z:", "Y:", "X:", "W:" }).Where(d => !string.IsNullOrWhiteSpace(d)).Distinct(StringComparer.OrdinalIgnoreCase))
                 driveCombo.Items.Add(d);
             if (!string.IsNullOrWhiteSpace(old)) SelectComboValue(driveCombo, old);
@@ -2109,7 +2109,7 @@ namespace RcloneDriveManager
         {
             return string.IsNullOrWhiteSpace(drive) ||
                    string.Equals(drive, "AUTO", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(drive, "Tá»± chá»n á»• trá»‘ng", StringComparison.OrdinalIgnoreCase);
+                   string.Equals(drive, "Tự chọn ổ trống", StringComparison.OrdinalIgnoreCase);
         }
 
         private string NormalizeDriveChoice(string value)
@@ -2125,7 +2125,7 @@ namespace RcloneDriveManager
             string active;
             if (_activeDrives.TryGetValue(profile, out active) && !string.IsNullOrWhiteSpace(active))
                 return active;
-            return IsAutoDrive(profile.DriveLetter) ? "Tá»± Ä‘á»™ng" : profile.DriveLetter;
+            return IsAutoDrive(profile.DriveLetter) ? "Tự động" : profile.DriveLetter;
         }
 
         private string ResolveDriveForMount(DriveProfile profile)
@@ -2133,7 +2133,7 @@ namespace RcloneDriveManager
             if (!IsAutoDrive(profile.DriveLetter)) return NormalizeDriveChoice(profile.DriveLetter);
             var free = GetFreeDriveLetters().FirstOrDefault();
             if (string.IsNullOrWhiteSpace(free))
-                throw new InvalidOperationException("KhÃ´ng tÃ¬m tháº¥y kÃ½ tá»± á»• Ä‘Ä©a trá»‘ng.");
+                throw new InvalidOperationException("Không tìm thấy ký tự ổ đĩa trống.");
             return free;
         }
 
@@ -2161,7 +2161,7 @@ namespace RcloneDriveManager
         private void SelectComboValue(ComboBox combo, string value)
         {
             if (value == null) return;
-            if (IsAutoDrive(value)) value = "Tá»± chá»n á»• trá»‘ng";
+            if (IsAutoDrive(value)) value = "Tự chọn ổ trống";
             var i = combo.Items.IndexOf(value);
             if (i >= 0) combo.SelectedIndex = i;
             else if (combo.DropDownStyle != ComboBoxStyle.DropDownList) combo.Text = value;
@@ -2221,7 +2221,7 @@ namespace RcloneDriveManager
                 var baseName = string.IsNullOrWhiteSpace(nameBox.Text) ? p.Name : nameBox.Text.Trim();
                 p = CreateProfileFromCurrentFields(UniqueProfileName(baseName), true);
                 if (p != null)
-                    AddLog("Profile Ä‘ang káº¿t ná»‘i, tá»± táº¡o á»• má»›i Ä‘á»ƒ mount thÃªm.");
+                    AddLog("Profile đang kết nối, tự tạo ổ mới để mount thêm.");
             }
             else
                 SaveCurrentProfile();
@@ -2234,8 +2234,8 @@ namespace RcloneDriveManager
             var remote = Convert.ToString(remoteCombo.SelectedItem ?? remoteCombo.Text ?? "").Trim();
             if (string.IsNullOrWhiteSpace(remote))
             {
-                AddLog("HÃ£y chá»n remote trÆ°á»›c khi káº¿t ná»‘i.", "ERROR");
-                SelectTab("á»” Ä‘Ä©a");
+                AddLog("Hãy chọn remote trước khi kết nối.", "ERROR");
+                SelectTab("Ổ đĩa");
                 return null;
             }
             var p = new DriveProfile
@@ -2261,7 +2261,7 @@ namespace RcloneDriveManager
             SaveProfiles();
             RenderProfiles();
             SelectProfile(p);
-            AddLog("ÄÃ£ táº¡o profile má»›i tá»« form hiá»‡n táº¡i: " + p.Name);
+            AddLog("Đã tạo profile mới từ form hiện tại: " + p.Name);
             return p;
         }
 
@@ -2288,7 +2288,7 @@ namespace RcloneDriveManager
             }
             if (!IsWinFspInstalled())
             {
-                AddLog("Thiáº¿u WinFsp. Báº¯t Ä‘áº§u luá»“ng táº£i/cÃ i WinFsp trÆ°á»›c khi mount.", "WARN");
+                AddLog("Thiếu WinFsp. Bắt đầu luồng tải/cài WinFsp trước khi mount.", "WARN");
                 if (!await EnsureWinFspAvailableAsync(false))
                     return;
             }
@@ -2306,7 +2306,7 @@ namespace RcloneDriveManager
             }
             if (!IsDriveAvailableForMount(mountDrive))
             {
-                AddLog("á»” " + mountDrive + " Ä‘ang Ä‘Æ°á»£c Windows sá»­ dá»¥ng. HÃ£y chá»n kÃ½ tá»± khÃ¡c hoáº·c dÃ¹ng Tá»± chá»n á»• trá»‘ng.", "ERROR");
+                AddLog("Ổ " + mountDrive + " đang được Windows sử dụng. Hãy chọn ký tự khác hoặc dùng Tự chọn ổ trống.", "ERROR");
                 RefreshDriveLetters();
                 return;
             }
@@ -2361,11 +2361,11 @@ namespace RcloneDriveManager
                 CleanupMountState(p, mountDrive);
                 RenderProfiles();
                 RefreshDriveLetters();
-                AddLog("Mount tháº¥t báº¡i cho " + mountDrive + ". Xem log rclone phÃ­a trÃªn Ä‘á»ƒ biáº¿t nguyÃªn nhÃ¢n.", "ERROR");
+                AddLog("Mount thất bại cho " + mountDrive + ". Xem log rclone phía trên để biết nguyên nhân.", "ERROR");
             }
             else
             {
-                AddLog("Process mount Ä‘ang cháº¡y nhÆ°ng Windows chÆ°a tháº¥y á»• " + mountDrive + ". Thá»­ gÃµ " + mountDrive + "\\ trÃªn thanh Ä‘á»‹a chá»‰ Explorer; náº¿u váº«n khÃ´ng tháº¥y, kiá»ƒm tra WinFsp hoáº·c log rclone.", "WARN");
+                AddLog("Process mount đang chạy nhưng Windows chưa thấy ổ " + mountDrive + ". Thử gõ " + mountDrive + "\\ trên thanh địa chỉ Explorer; nếu vẫn không thấy, kiểm tra WinFsp hoặc log rclone.", "WARN");
             }
         }
 
@@ -2459,7 +2459,7 @@ namespace RcloneDriveManager
         {
             if (!string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase)) return;
 
-            AddLog("Ãp dá»¥ng preset FTP cho sá»­a live: cache metadata ngáº¯n, transfers tháº¥p, retries cao, bá» qua .ftpquota.");
+            AddLog("Áp dụng preset FTP cho sửa live: cache metadata ngắn, transfers thấp, retries cao, bỏ qua .ftpquota.");
             AddArgIfMissing(args, p.ExtraArgs, "--checkers", "1");
             AddArgIfMissing(args, p.ExtraArgs, "--retries", "6");
             AddArgIfMissing(args, p.ExtraArgs, "--low-level-retries", "20");
@@ -2485,11 +2485,11 @@ namespace RcloneDriveManager
 
         private async Task<bool> TestRemoteBeforeMountAsync(string source)
         {
-            AddLog("Kiá»ƒm tra remote trÆ°á»›c khi mount: " + source);
+            AddLog("Kiểm tra remote trước khi mount: " + source);
             var result = await RunRcloneResultAsync(45000, "rclone lsf " + source + " --max-depth 1", "lsf", source, "--max-depth", "1");
             if (result.TimedOut)
             {
-                AddLog("Kiá»ƒm tra remote quÃ¡ thá»i gian. KhÃ´ng mount Ä‘á»ƒ trÃ¡nh app bá»‹ káº¹t.", "ERROR");
+                AddLog("Kiểm tra remote quá thời gian. Không mount để tránh app bị kẹt.", "ERROR");
                 return false;
             }
             if (result.ExitCode != 0)
@@ -2497,7 +2497,7 @@ namespace RcloneDriveManager
                 AddLog(PreflightErrorMessage(result.Output, result.ExitCode), "ERROR");
                 return false;
             }
-            AddLog("Remote OK, báº¯t Ä‘áº§u mount.");
+            AddLog("Remote OK, bắt đầu mount.");
             return true;
         }
 
@@ -2505,12 +2505,12 @@ namespace RcloneDriveManager
         {
             var text = output ?? "";
             if (text.IndexOf("Too many connections", StringComparison.OrdinalIgnoreCase) >= 0 || text.IndexOf("421", StringComparison.OrdinalIgnoreCase) >= 0)
-                return "FTP server Ä‘ang giá»›i háº¡n quÃ¡ nhiá»u káº¿t ná»‘i tá»« IP nÃ y. HÃ£y ngáº¯t cÃ¡c á»•/phiÃªn FTP cÅ©, Ä‘á»£i vÃ i phÃºt rá»“i thá»­ láº¡i. KhÃ´ng mount. Exit code: " + exitCode;
+                return "FTP server đang giới hạn quá nhiều kết nối từ IP này. Hãy ngắt các ổ/phiên FTP cũ, đợi vài phút rồi thử lại. Không mount. Exit code: " + exitCode;
             if (text.IndexOf("Login authentication failed", StringComparison.OrdinalIgnoreCase) >= 0 || text.IndexOf("530", StringComparison.OrdinalIgnoreCase) >= 0)
-                return "Sai user/pass hoáº·c tÃ i khoáº£n FTP khÃ´ng Ä‘Æ°á»£c phÃ©p Ä‘Äƒng nháº­p. KhÃ´ng mount. Exit code: " + exitCode;
+                return "Sai user/pass hoặc tài khoản FTP không được phép đăng nhập. Không mount. Exit code: " + exitCode;
             if (text.IndexOf("directory not found", StringComparison.OrdinalIgnoreCase) >= 0)
-                return "ÄÆ°á»ng dáº«n remote khÃ´ng tá»“n táº¡i. Vá»›i rclone hÃ£y nháº­p dáº¡ng /thu-muc, khÃ´ng nháº­p \\\\server\\share. KhÃ´ng mount. Exit code: " + exitCode;
-            return "Remote chÆ°a sáºµn sÃ ng. KhÃ´ng mount. Exit code: " + exitCode;
+                return "Đường dẫn remote không tồn tại. Với rclone hãy nhập dạng /thu-muc, không nhập \\\\server\\share. Không mount. Exit code: " + exitCode;
+            return "Remote chưa sẵn sàng. Không mount. Exit code: " + exitCode;
         }
 
         private void UnmountSelected()
@@ -2521,7 +2521,7 @@ namespace RcloneDriveManager
                 var external = SelectedMountedDrive;
                 if (external == null) return;
                 UnmountDriveLetter(external.DriveLetter, external.Name);
-                AddLog("ÄÃ£ gá»­i lá»‡nh ngáº¯t á»• Ä‘ang báº­t sáºµn: " + external.DriveLetter);
+                AddLog("Đã gửi lệnh ngắt ổ đang bật sẵn: " + external.DriveLetter);
                 RenderProfiles();
                 return;
             }
@@ -2555,11 +2555,11 @@ namespace RcloneDriveManager
             if (!string.IsNullOrWhiteSpace(output)) AddLog(output.Trim());
             if (WaitForDriveRemoved(drive, 6000))
             {
-                AddLog("ÄÃ£ ngáº¯t á»• " + drive);
+                AddLog("Đã ngắt ổ " + drive);
             }
             else
             {
-                AddLog("á»” " + drive + " váº«n cÃ²n sau lá»‡nh ngáº¯t. CÃ³ thá»ƒ process rclone Ä‘ang cháº¡y quyá»n khÃ¡c; hÃ£y cháº¡y app cÃ¹ng quyá»n vá»›i lÃºc mount.", "ERROR");
+                AddLog("Ổ " + drive + " vẫn còn sau lệnh ngắt. Có thể process rclone đang chạy quyền khác; hãy chạy app cùng quyền với lúc mount.", "ERROR");
             }
             RefreshExplorer();
             CleanupMountStateForDrive(drive);
@@ -2604,18 +2604,18 @@ namespace RcloneDriveManager
                         {
                             var process = Process.GetProcessById(mount.ProcessId);
                             process.Kill();
-                            AddLog("ÄÃ£ dá»«ng rclone PID " + mount.ProcessId + " cho á»• " + drive);
+                            AddLog("Đã dừng rclone PID " + mount.ProcessId + " cho ổ " + drive);
                         }
                         catch (Exception ex)
                         {
-                            AddLog("KhÃ´ng dá»«ng Ä‘Æ°á»£c rclone PID " + mount.ProcessId + ": " + ex.Message, "WARN");
+                            AddLog("Không dừng được rclone PID " + mount.ProcessId + ": " + ex.Message, "WARN");
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                AddLog("KhÃ´ng quÃ©t Ä‘Æ°á»£c process rclone Ä‘á»ƒ ngáº¯t á»•: " + ex.Message, "WARN");
+                AddLog("Không quét được process rclone để ngắt ổ: " + ex.Message, "WARN");
             }
         }
 
@@ -2632,7 +2632,7 @@ namespace RcloneDriveManager
             var drive = ActiveDriveForProfile(p);
             if (IsAutoDrive(drive))
             {
-                MessageBox.Show("Profile nÃ y Ä‘ang chá»n tá»± Ä‘á»™ng nhÆ°ng chÆ°a Ä‘Æ°á»£c mount.", "TrÃ¬nh quáº£n lÃ½ á»• Rclone", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Profile này đang chọn tự động nhưng chưa được mount.", "Trình quản lý ổ Rclone", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
             OpenDriveInExplorer(drive);
@@ -2654,11 +2654,11 @@ namespace RcloneDriveManager
 
             if (pending.Count == 0)
             {
-                AddLog("KhÃ´ng cÃ³ config nÃ o cáº§n mount.");
+                AddLog("Không có config nào cần mount.");
                 return;
             }
 
-            AddLog("Mount " + pending.Count + " config chÆ°a káº¿t ná»‘i...");
+            AddLog("Mount " + pending.Count + " config chưa kết nối...");
             foreach (var profile in pending)
                 await MountProfileAsync(profile);
         }
@@ -2667,7 +2667,7 @@ namespace RcloneDriveManager
         {
             if (!File.Exists(_rcloneExe))
             {
-                AddLog("KhÃ´ng tÃ¬m tháº¥y rclone.exe Ä‘á»ƒ cháº¡y UI web.", "ERROR");
+                AddLog("Không tìm thấy rclone.exe để chạy UI web.", "ERROR");
                 return;
             }
 
@@ -2675,7 +2675,7 @@ namespace RcloneDriveManager
             {
                 if (_webUiProcess != null && !_webUiProcess.HasExited)
                 {
-                    AddLog("UI web Ä‘ang cháº¡y, má»Ÿ láº¡i trÃ¬nh duyá»‡t.");
+                    AddLog("UI web đang chạy, mở lại trình duyệt.");
                     Process.Start(new ProcessStartInfo("http://127.0.0.1:5572") { UseShellExecute = true });
                     return;
                 }
@@ -2704,20 +2704,20 @@ namespace RcloneDriveManager
                 _webUiProcess.EnableRaisingEvents = true;
                 _webUiProcess.OutputDataReceived += (s, e) => { if (e.Data != null) AddLog(e.Data); };
                 _webUiProcess.ErrorDataReceived += (s, e) => { if (e.Data != null) AddLog(e.Data, "WEB"); };
-                _webUiProcess.Exited += (s, e) => AddLog("UI web Ä‘Ã£ dá»«ng.");
+                _webUiProcess.Exited += (s, e) => AddLog("UI web đã dừng.");
                 _webUiProcess.BeginOutputReadLine();
                 _webUiProcess.BeginErrorReadLine();
 
-                AddLog("ÄÃ£ cháº¡y Rclone Web GUI táº¡i http://127.0.0.1:5572");
+                AddLog("Đã chạy Rclone Web GUI tại http://127.0.0.1:5572");
                 Task.Delay(1800).ContinueWith(_ =>
                 {
                     try { Process.Start(new ProcessStartInfo("http://127.0.0.1:5572") { UseShellExecute = true }); }
-                    catch (Exception ex) { AddLog("KhÃ´ng má»Ÿ Ä‘Æ°á»£c trÃ¬nh duyá»‡t: " + ex.Message, "WARN"); }
+                    catch (Exception ex) { AddLog("Không mở được trình duyệt: " + ex.Message, "WARN"); }
                 });
             }
             catch (Exception ex)
             {
-                AddLog("KhÃ´ng cháº¡y Ä‘Æ°á»£c UI web: " + ex.Message, "ERROR");
+                AddLog("Không chạy được UI web: " + ex.Message, "ERROR");
             }
         }
 
@@ -2784,11 +2784,11 @@ namespace RcloneDriveManager
             {
                 var root = drive.TrimEnd('\\') + "\\";
                 Process.Start(new ProcessStartInfo("explorer.exe", root) { UseShellExecute = true });
-                AddLog("ÄÃ£ má»Ÿ Explorer táº¡i " + root);
+                AddLog("Đã mở Explorer tại " + root);
             }
             catch (Exception ex)
             {
-                AddLog("KhÃ´ng má»Ÿ Ä‘Æ°á»£c Explorer: " + ex.Message, "WARN");
+                AddLog("Không mở được Explorer: " + ex.Message, "WARN");
             }
         }
 
@@ -2802,7 +2802,7 @@ namespace RcloneDriveManager
                 var iconPath = Path.Combine(_appDir, "RcloneDriveManager", "RcloneDrive.ico");
                 if (enabled && !File.Exists(iconPath))
                 {
-                    AddLog("KhÃ´ng tháº¥y file icon á»• rclone: " + iconPath, "WARN");
+                    AddLog("Không thấy file icon ổ rclone: " + iconPath, "WARN");
                     return;
                 }
 
@@ -2826,11 +2826,11 @@ namespace RcloneDriveManager
                         try { Registry.CurrentUser.DeleteSubKeyTree(path, false); } catch { }
                     }
                 }
-                AddLog((enabled ? "ÄÃ£ Ä‘áº·t icon rclone cho á»• " : "ÄÃ£ xÃ³a icon rclone cho á»• ") + letter + ":");
+                AddLog((enabled ? "Đã đặt icon rclone cho ổ " : "Đã xóa icon rclone cho ổ ") + letter + ":");
             }
             catch (Exception ex)
             {
-                AddLog("KhÃ´ng cáº­p nháº­t Ä‘Æ°á»£c icon á»•: " + ex.Message, "WARN");
+                AddLog("Không cập nhật được icon ổ: " + ex.Message, "WARN");
             }
         }
 
@@ -2882,13 +2882,13 @@ namespace RcloneDriveManager
             }
             catch (Exception ex)
             {
-                AddLog("KhÃ´ng Ä‘á»c Ä‘Æ°á»£c danh sÃ¡ch file JSON: " + ex.Message, "ERROR");
+                AddLog("Không đọc được danh sách file JSON: " + ex.Message, "ERROR");
             }
             if (items == null) return;
 
             foreach (var item in items.OrderByDescending(x => x.IsDir).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase))
             {
-                var row = new ListViewItem(item.IsDir ? "ThÆ° má»¥c" : "File");
+                var row = new ListViewItem(item.IsDir ? "Thư mục" : "File");
                 row.SubItems.Add(string.IsNullOrWhiteSpace(item.Name) ? item.Path : item.Name);
                 row.SubItems.Add(item.IsDir ? "" : FormatBytes(item.Size));
                 row.SubItems.Add(FormatRemoteTime(item.ModTime));
@@ -2976,16 +2976,16 @@ namespace RcloneDriveManager
             else if (_remotes.Count > 0)
                 defaultRemote = _remotes[0].TrimEnd(':') + ":/RcloneDriveManagerBackup";
 
-            var dest = Prompt.Show("Nháº­p remote/path Ä‘á»ƒ Ä‘á»“ng bá»™ config lÃªn", "Äá»“ng bá»™ config lÃªn", defaultRemote);
+            var dest = Prompt.Show("Nhập remote/path để đồng bộ config lên", "Đồng bộ config lên", defaultRemote);
             if (string.IsNullOrWhiteSpace(dest)) return;
             dest = dest.Trim().Replace("\\", "/").TrimEnd('/');
             if (!dest.Contains(":"))
             {
-                MessageBox.Show("ÄÃ­ch pháº£i cÃ³ dáº¡ng remote:/thu-muc, vÃ­ dá»¥ api:/RcloneDriveManagerBackup.", "TrÃ¬nh quáº£n lÃ½ á»• Rclone", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Đích phải có dạng remote:/thu-muc, ví dụ api:/RcloneDriveManagerBackup.", "Trình quản lý ổ Rclone", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            AddLog("Äá»“ng bá»™ config lÃªn: " + dest);
+            AddLog("Đồng bộ config lên: " + dest);
             await RunCaptureAsync("mkdir", dest);
 
             var rcloneConfig = await GetRcloneConfigPathAsync();
@@ -2995,7 +2995,7 @@ namespace RcloneDriveManager
             }
             else
             {
-                AddLog("KhÃ´ng tÃ¬m tháº¥y rclone.conf Ä‘á»ƒ Ä‘á»“ng bá»™.", "WARN");
+                AddLog("Không tìm thấy rclone.conf để đồng bộ.", "WARN");
             }
 
             if (File.Exists(_profilesFile))
@@ -3004,7 +3004,7 @@ namespace RcloneDriveManager
             }
             else
             {
-                AddLog("KhÃ´ng tÃ¬m tháº¥y profiles.json Ä‘á»ƒ Ä‘á»“ng bá»™.", "WARN");
+                AddLog("Không tìm thấy profiles.json để đồng bộ.", "WARN");
             }
 
             var manifest = Path.Combine(_dataDir, "sync-manifest.txt");
@@ -3017,7 +3017,7 @@ namespace RcloneDriveManager
                 "App: " + Application.ExecutablePath + "\r\n",
                 Encoding.UTF8);
             await RunCaptureAsync("copyto", manifest, dest + "/sync-manifest.txt");
-            AddLog("ÄÃ£ Ä‘á»“ng bá»™ config lÃªn " + dest);
+            AddLog("Đã đồng bộ config lên " + dest);
         }
 
         private async Task<string> GetRcloneConfigPathAsync()
@@ -3070,7 +3070,7 @@ namespace RcloneDriveManager
             }
             catch (Exception ex)
             {
-                AddLog("KhÃ´ng Ä‘á»c Ä‘Æ°á»£c loáº¡i remote " + name + ": " + ex.Message, "WARN");
+                AddLog("Không đọc được loại remote " + name + ": " + ex.Message, "WARN");
             }
             return "";
         }
@@ -3158,7 +3158,7 @@ namespace RcloneDriveManager
             }
 
             AddLog("Creating config " + name + ": type " + type);
-            var output = await RunCaptureSensitiveAsync(args.ToArray(), "rclone --non-interactive config create " + name + " " + type + " ... pass=<áº©n>");
+            var output = await RunCaptureSensitiveAsync(args.ToArray(), "rclone --non-interactive config create " + name + " " + type + " ... pass=<ẩn>");
             await RefreshRemotesAsync();
 
             if (!_remotes.Any(r => string.Equals(r.TrimEnd(':'), name, StringComparison.OrdinalIgnoreCase)))
@@ -3214,10 +3214,10 @@ namespace RcloneDriveManager
             var value = result.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
             if (string.IsNullOrWhiteSpace(value))
             {
-                AddLog("KhÃ´ng mÃ£ hÃ³a Ä‘Æ°á»£c password báº±ng rclone obscure.", "WARN");
+                AddLog("Không mã hóa được password bằng rclone obscure.", "WARN");
                 return password;
             }
-            AddLog("ÄÃ£ mÃ£ hÃ³a password báº±ng rclone obscure.");
+            AddLog("Đã mã hóa password bằng rclone obscure.");
             return value.Trim();
         }
 
