@@ -542,7 +542,7 @@ namespace RcloneDriveManager
             var systemActions = ToolGroup("Hệ thống");
             systemActions.Controls.Add(ActionButton("Quét ổ", (s, e) => RefreshMountedDriveList(), _surface, _text, 88));
             systemActions.Controls.Add(ActionButton("Làm mới", async (s, e) => await RefreshAllAsync(), _surface, _text, 104));
-            systemActions.Controls.Add(ActionButton("WinFsp", (s, e) => OpenWinFspDownload(), _surface, _text, 92));
+            systemActions.Controls.Add(ActionButton("Cài WinFsp", async (s, e) => await EnsureWinFspAvailableAsync(true), _surface, _text, 112));
             systemActions.Controls.Add(ActionButton("Startup ON", (s, e) => SetStartup(true), _surface, _text, 112));
             systemActions.Controls.Add(ActionButton("Startup OFF", (s, e) => SetStartup(false), _surface, _danger, 116));
             layout.Controls.Add(systemActions, 0, 4);
@@ -870,6 +870,121 @@ namespace RcloneDriveManager
             {
                 AddLog("Không mở được trang tải WinFsp: " + ex.Message, "ERROR");
             }
+        }
+
+        private async Task<bool> EnsureWinFspAvailableAsync(bool showAlreadyInstalled)
+        {
+            if (IsWinFspInstalled())
+            {
+                if (showAlreadyInstalled) AddLog("WinFsp đã được cài.");
+                return true;
+            }
+
+            var confirm = MessageBox.Show(
+                "Máy chưa có WinFsp nên rclone không tạo được ổ đĩa.\r\n\r\nTải và cài WinFsp tự động bây giờ?\r\n\r\nWindows sẽ hiện UAC để cấp quyền cài driver.",
+                "Cài WinFsp",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+            if (confirm != DialogResult.Yes)
+            {
+                AddLog("Người dùng bỏ qua cài WinFsp.", "WARN");
+                return false;
+            }
+
+            await DownloadAndInstallWinFspAsync();
+            if (IsWinFspInstalled())
+            {
+                AddLog("WinFsp đã cài xong. Có thể mount ổ rclone.");
+                return true;
+            }
+
+            AddLog("Chưa xác nhận được WinFsp sau khi cài. Nếu installer vừa chạy xong, hãy mở lại app hoặc khởi động lại Windows nếu cần.", "ERROR");
+            return false;
+        }
+
+        private async Task DownloadAndInstallWinFspAsync()
+        {
+            var url = await GetLatestWinFspInstallerUrlAsync();
+            var tempRoot = Path.Combine(Path.GetTempPath(), "RcloneDriveManager", "WinFsp-" + Guid.NewGuid().ToString("N"));
+            var msiPath = Path.Combine(tempRoot, "winfsp.msi");
+            try
+            {
+                Directory.CreateDirectory(tempRoot);
+                statusLabel.Text = "Đang tải WinFsp...";
+                AddLog("Tải WinFsp từ " + url);
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                using (var client = new WebClient())
+                {
+                    client.Headers.Add("User-Agent", "RcloneDriveManager");
+                    await client.DownloadFileTaskAsync(new Uri(url), msiPath);
+                }
+
+                statusLabel.Text = "Đang cài WinFsp...";
+                AddLog("Chạy installer WinFsp. Windows có thể hỏi quyền Administrator.");
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "msiexec.exe",
+                    Arguments = "/i " + QuoteIfNeeded(msiPath) + " /passive /norestart",
+                    UseShellExecute = true,
+                    Verb = "runas"
+                };
+                using (var proc = Process.Start(psi))
+                {
+                    if (proc != null)
+                    {
+                        await Task.Run(() => proc.WaitForExit());
+                        AddLog("WinFsp installer exit code: " + proc.ExitCode, proc.ExitCode == 0 ? "INFO" : "WARN");
+                    }
+                }
+                statusLabel.Text = "Đã chạy cài WinFsp";
+            }
+            catch (Win32Exception ex)
+            {
+                statusLabel.Text = "Cài WinFsp bị hủy";
+                AddLog("Không chạy được installer WinFsp: " + ex.Message, "ERROR");
+            }
+            catch (Exception ex)
+            {
+                statusLabel.Text = "Cài WinFsp lỗi";
+                AddLog("Cài WinFsp thất bại: " + ex.Message, "ERROR");
+                if (MessageBox.Show("Cài WinFsp tự động thất bại:\r\n" + ex.Message + "\r\n\r\nMở trang tải thủ công?", "Cài WinFsp", MessageBoxButtons.YesNo, MessageBoxIcon.Error) == DialogResult.Yes)
+                    OpenWinFspDownload();
+            }
+            finally
+            {
+                try { if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, true); } catch { }
+            }
+        }
+
+        private async Task<string> GetLatestWinFspInstallerUrlAsync()
+        {
+            const string apiUrl = "https://api.github.com/repos/winfsp/winfsp/releases/latest";
+            using (var client = new WebClient())
+            {
+                client.Headers.Add("User-Agent", "RcloneDriveManager");
+                var json = await client.DownloadStringTaskAsync(apiUrl);
+                var data = _json.DeserializeObject(json) as Dictionary<string, object>;
+                if (data != null && data.ContainsKey("assets"))
+                {
+                    var assets = data["assets"] as object[];
+                    if (assets != null)
+                    {
+                        foreach (var item in assets)
+                        {
+                            var asset = item as Dictionary<string, object>;
+                            if (asset == null) continue;
+                            var name = Convert.ToString(asset.ContainsKey("name") ? asset["name"] : "");
+                            var download = Convert.ToString(asset.ContainsKey("browser_download_url") ? asset["browser_download_url"] : "");
+                            if (name.StartsWith("winfsp-", StringComparison.OrdinalIgnoreCase) &&
+                                name.EndsWith(".msi", StringComparison.OrdinalIgnoreCase) &&
+                                !name.Contains("tests") &&
+                                !string.IsNullOrWhiteSpace(download))
+                                return download;
+                        }
+                    }
+                }
+            }
+            throw new InvalidOperationException("Không tìm thấy file MSI WinFsp mới nhất trên GitHub release.");
         }
 
         private async Task EnsureRcloneAvailableAsync()
@@ -1967,10 +2082,9 @@ namespace RcloneDriveManager
             }
             if (!IsWinFspInstalled())
             {
-                AddLog("Thiếu WinFsp nên không thể mount ổ Windows. Cài WinFsp rồi mở lại app.", "ERROR");
-                if (MessageBox.Show("Máy chưa có WinFsp nên rclone không tạo được ổ đĩa.\r\n\r\nMở trang tải WinFsp bây giờ?", "Thiếu WinFsp", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
-                    OpenWinFspDownload();
-                return;
+                AddLog("Thiếu WinFsp. Bắt đầu luồng tải/cài WinFsp trước khi mount.", "WARN");
+                if (!await EnsureWinFspAvailableAsync(false))
+                    return;
             }
 
             string mountDrive;
