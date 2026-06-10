@@ -24,6 +24,7 @@ namespace RcloneDriveManager
         [STAThread]
         private static void Main(string[] args)
         {
+            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new MainForm(args));
@@ -259,7 +260,7 @@ namespace RcloneDriveManager
                 if (File.Exists(_rcloneExe))
                     await RefreshRemotesAsync();
                 SelectFirstProfile();
-                _ = CheckForAppUpdateAsync(false);
+                _ = CheckForAppUpdateOnStartupAsync();
                 if (_args.Any(a => string.Equals(a, "--automount", StringComparison.OrdinalIgnoreCase)))
                     await MountAutoProfilesAsync();
             };
@@ -1065,15 +1066,15 @@ namespace RcloneDriveManager
                     return;
                 }
 
-                if (manual) AddLog("Đang kiểm tra cập nhật app...");
+                AddLog(manual ? "Đang kiểm tra cập nhật app..." : "Tự kiểm tra cập nhật app...");
                 var tempRoot = Path.Combine(Path.GetTempPath(), "RcloneDriveManager", "Update-" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(tempRoot);
                 var newExe = Path.Combine(tempRoot, "RcloneDrive.exe");
                 var updateUrl = await GetLatestAppExeUrlAsync();
+                AddLog("Tải file cập nhật từ GitHub...");
 
-                using (var client = new WebClient())
+                using (var client = CreateWebClient())
                 {
-                    client.Headers.Add("User-Agent", "RcloneDriveManager");
                     await client.DownloadFileTaskAsync(new Uri(updateUrl), newExe);
                 }
 
@@ -1086,6 +1087,7 @@ namespace RcloneDriveManager
 
                 var currentHash = FileSha256(Application.ExecutablePath);
                 var newHash = FileSha256(newExe);
+                AddLog("Đã tải file cập nhật. SHA hiện tại: " + currentHash.Substring(0, 8) + ", SHA mới: " + newHash.Substring(0, 8));
                 if (string.Equals(currentHash, newHash, StringComparison.OrdinalIgnoreCase))
                 {
                     TryDeleteDirectory(tempRoot);
@@ -1117,6 +1119,20 @@ namespace RcloneDriveManager
             }
         }
 
+        private async Task CheckForAppUpdateOnStartupAsync()
+        {
+            try
+            {
+                await Task.Delay(6000);
+                if (IsDisposed || !IsHandleCreated) return;
+                await CheckForAppUpdateAsync(false);
+            }
+            catch (Exception ex)
+            {
+                AddLog("Tự kiểm tra cập nhật app thất bại: " + ex.Message, "WARN");
+            }
+        }
+
         private string FileSha256(string file)
         {
             using (var sha = SHA256.Create())
@@ -1126,15 +1142,43 @@ namespace RcloneDriveManager
 
         private async Task<string> GetLatestAppExeUrlAsync()
         {
-            using (var client = new WebClient())
+            using (var client = CreateWebClient())
             {
-                client.Headers.Add("User-Agent", "RcloneDriveManager");
                 var json = await client.DownloadStringTaskAsync(AppUpdateCommitApiUrl);
                 var data = _json.DeserializeObject(json) as Dictionary<string, object>;
                 var sha = Convert.ToString(data != null && data.ContainsKey("sha") ? data["sha"] : "");
                 if (string.IsNullOrWhiteSpace(sha))
                     throw new InvalidOperationException("Không lấy được commit mới nhất từ GitHub.");
+                AddLog("Commit mới nhất trên GitHub: " + sha.Substring(0, Math.Min(8, sha.Length)));
                 return "https://raw.githubusercontent.com/luffyorhuymv/rclone-gui/" + sha + "/RcloneDrive.exe";
+            }
+        }
+
+        private WebClient CreateWebClient()
+        {
+            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+            var client = new TimedWebClient(30000);
+            client.Headers.Add("User-Agent", "RcloneDriveManager");
+            client.Headers.Add("Cache-Control", "no-cache");
+            client.Headers.Add("Pragma", "no-cache");
+            return client;
+        }
+
+        private sealed class TimedWebClient : WebClient
+        {
+            private readonly int _timeoutMs;
+
+            public TimedWebClient(int timeoutMs)
+            {
+                _timeoutMs = timeoutMs;
+            }
+
+            protected override WebRequest GetWebRequest(Uri address)
+            {
+                var request = base.GetWebRequest(address);
+                if (request != null)
+                    request.Timeout = _timeoutMs;
+                return request;
             }
         }
 
