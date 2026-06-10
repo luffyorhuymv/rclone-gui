@@ -1591,15 +1591,15 @@ namespace RcloneDriveManager
         private void ApplyCodeIdePreset()
         {
             SelectComboValue(cacheModeCombo, "full");
-            cacheMaxAgeBox.Text = "24h";
+            cacheMaxAgeBox.Text = "72h";
             writeBackBox.Text = "2s";
-            transfersBox.Value = Math.Max(transfersBox.Minimum, Math.Min(transfersBox.Maximum, 2));
-            bufferBox.Value = Math.Max(bufferBox.Minimum, Math.Min(bufferBox.Maximum, 16));
+            transfersBox.Value = Math.Max(transfersBox.Minimum, Math.Min(transfersBox.Maximum, 1));
+            bufferBox.Value = Math.Max(bufferBox.Minimum, Math.Min(bufferBox.Maximum, 32));
             networkModeBox.Checked = true;
             readOnlyBox.Checked = false;
 
             SaveCurrentProfile();
-            AddLog("Đã áp dụng preset Code IDE/live: cache full, dir cache ngắn, tự upload sau 2s.");
+            AddLog("Đã áp dụng preset Code IDE/RaiDrive: cache full, metadata lâu hơn, đọc project nhanh hơn.");
         }
 
         private void NewProfile()
@@ -2401,9 +2401,11 @@ namespace RcloneDriveManager
             args.Add(GetAttrTimeout(remoteType));
             args.Add("--buffer-size");
             args.Add(GetBufferSizeMb(p, remoteType) + "M");
+            args.Add("--vfs-read-ahead");
+            args.Add(GetReadAhead(remoteType));
             args.Add("--transfers");
             args.Add(GetTransferCount(p, remoteType).ToString());
-            ApplyLiveEditArgs(args, p, remoteType);
+            ApplyRaiDriveLikeArgs(args, p, remoteType);
             ApplyFtpSafeMountArgs(args, p, remoteType);
             AddExtraArgs(args, p.ExtraArgs);
             args.Add("-v");
@@ -2413,9 +2415,9 @@ namespace RcloneDriveManager
         private string GetDirCacheTime(string remoteType)
         {
             if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase))
-                return "10s";
+                return "5m";
             if (string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
-                return "15s";
+                return "5m";
             return "30s";
         }
 
@@ -2423,7 +2425,7 @@ namespace RcloneDriveManager
         {
             if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
-                return "1s";
+                return "30s";
             return "5s";
         }
 
@@ -2431,10 +2433,18 @@ namespace RcloneDriveManager
         {
             var requested = Math.Max(1, p.BufferSizeMb);
             if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase))
-                return Math.Min(8, requested);
+                return Math.Min(32, requested);
             if (string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
-                return Math.Min(16, requested);
+                return Math.Min(32, requested);
             return requested;
+        }
+
+        private string GetReadAhead(string remoteType)
+        {
+            if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
+                return "32M";
+            return "16M";
         }
 
         private int GetTransferCount(DriveProfile p, string remoteType)
@@ -2447,13 +2457,16 @@ namespace RcloneDriveManager
             return requested;
         }
 
-        private void ApplyLiveEditArgs(List<string> args, DriveProfile p, string remoteType)
+        private void ApplyRaiDriveLikeArgs(List<string> args, DriveProfile p, string remoteType)
         {
             if (!(string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
                   string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase)))
                 return;
 
             AddArgIfMissing(args, p.ExtraArgs, "--use-server-modtime", null);
+            AddArgIfMissing(args, p.ExtraArgs, "--vfs-fast-fingerprint", null);
+            AddArgIfMissing(args, p.ExtraArgs, "--poll-interval", "0");
+            AddArgIfMissing(args, p.ExtraArgs, "--vfs-cache-poll-interval", "5m");
             AddArgIfMissing(args, p.ExtraArgs, "--daemon-timeout", "15m");
         }
 
@@ -2461,11 +2474,11 @@ namespace RcloneDriveManager
         {
             if (!string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase)) return;
 
-            AddLog("Áp dụng preset FTP cho sửa live: cache metadata ngắn, transfers thấp, retries cao, bỏ qua .ftpquota.");
+            AddLog("Áp dụng preset FTP kiểu RaiDrive: cache metadata lâu hơn, transfers thấp, read-ahead cao, bỏ qua .ftpquota.");
             AddArgIfMissing(args, p.ExtraArgs, "--checkers", "1");
             AddArgIfMissing(args, p.ExtraArgs, "--retries", "6");
             AddArgIfMissing(args, p.ExtraArgs, "--low-level-retries", "20");
-            AddArgIfMissing(args, p.ExtraArgs, "--timeout", "1m");
+            AddArgIfMissing(args, p.ExtraArgs, "--timeout", "2m");
             AddArgIfMissing(args, p.ExtraArgs, "--contimeout", "15s");
 
             if (!HasExtraArg(p.ExtraArgs, "--exclude"))
