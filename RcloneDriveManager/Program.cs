@@ -1867,7 +1867,7 @@ namespace RcloneDriveManager
             var subPath = Prompt.Show("Nhập thư mục con cần mở trên ổ mount:", "Mở thư mục project", "public_html");
             if (string.IsNullOrWhiteSpace(subPath)) return;
             subPath = subPath.Trim().Trim('\\', '/').Replace('/', '\\');
-            var target = NormalizeDriveChoice(drive) + "\\";
+            var target = ProjectRootForProfile(p, drive);
             if (!string.IsNullOrWhiteSpace(subPath))
                 target = Path.Combine(target, subPath);
             try
@@ -1879,6 +1879,19 @@ namespace RcloneDriveManager
             {
                 AddLog("Không mở được thư mục project: " + ex.Message, "ERROR");
             }
+        }
+
+        private string ProjectRootForProfile(DriveProfile p, string drive)
+        {
+            drive = NormalizeDriveChoice(drive);
+            if (p != null && p.NetworkMode)
+            {
+                var displayRoot = GetDriveDisplayRoot(drive);
+                if (!string.IsNullOrWhiteSpace(displayRoot) && displayRoot.StartsWith(@"\\", StringComparison.Ordinal))
+                    return displayRoot.TrimEnd('\\') + "\\";
+                return @"\\server\" + SafeVolName(p, drive).Trim('\\') + "\\";
+            }
+            return drive + "\\";
         }
 
         private async Task DownloadRemoteToLocalAsync()
