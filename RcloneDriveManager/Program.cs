@@ -9,6 +9,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -165,6 +166,7 @@ namespace RcloneDriveManager
 
     public sealed class MainForm : Form
     {
+        private const string AppUpdateUrl = "https://raw.githubusercontent.com/luffyorhuymv/rclone-gui/main/RcloneDrive.exe";
         private readonly string[] _args;
         private readonly string _appDir;
         private readonly string _rcloneExe;
@@ -255,6 +257,7 @@ namespace RcloneDriveManager
                 if (File.Exists(_rcloneExe))
                     await RefreshRemotesAsync();
                 SelectFirstProfile();
+                _ = CheckForAppUpdateAsync(false);
                 if (_args.Any(a => string.Equals(a, "--automount", StringComparison.OrdinalIgnoreCase)))
                     await MountAutoProfilesAsync();
             };
@@ -542,6 +545,7 @@ namespace RcloneDriveManager
             var systemActions = ToolGroup("Hệ thống");
             systemActions.Controls.Add(ActionButton("Quét ổ", (s, e) => RefreshMountedDriveList(), _surface, _text, 88));
             systemActions.Controls.Add(ActionButton("Làm mới", async (s, e) => await RefreshAllAsync(), _surface, _text, 104));
+            systemActions.Controls.Add(ActionButton("Cập nhật", async (s, e) => await CheckForAppUpdateAsync(true), _surface, _text, 104));
             systemActions.Controls.Add(ActionButton("Cài WinFsp", async (s, e) => await EnsureWinFspAvailableAsync(true), _surface, _text, 112));
             systemActions.Controls.Add(ActionButton("Startup ON", (s, e) => SetStartup(true), _surface, _text, 112));
             systemActions.Controls.Add(ActionButton("Startup OFF", (s, e) => SetStartup(false), _surface, _danger, 116));
@@ -1039,6 +1043,111 @@ namespace RcloneDriveManager
             {
                 try { if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, true); } catch { }
             }
+        }
+
+        private async Task CheckForAppUpdateAsync(bool manual)
+        {
+            try
+            {
+                if (!File.Exists(Application.ExecutablePath))
+                {
+                    if (manual) AddLog("Không tìm thấy file app hiện tại để kiểm tra cập nhật.", "ERROR");
+                    return;
+                }
+
+                if (manual) AddLog("Đang kiểm tra cập nhật app...");
+                var tempRoot = Path.Combine(Path.GetTempPath(), "RcloneDriveManager", "Update-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(tempRoot);
+                var newExe = Path.Combine(tempRoot, "RcloneDrive.exe");
+
+                using (var client = new WebClient())
+                {
+                    client.Headers.Add("User-Agent", "RcloneDriveManager");
+                    await client.DownloadFileTaskAsync(new Uri(AppUpdateUrl), newExe);
+                }
+
+                if (new FileInfo(newExe).Length < 50000)
+                {
+                    TryDeleteDirectory(tempRoot);
+                    AddLog("File cập nhật tải về không hợp lệ.", "ERROR");
+                    return;
+                }
+
+                var currentHash = FileSha256(Application.ExecutablePath);
+                var newHash = FileSha256(newExe);
+                if (string.Equals(currentHash, newHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    TryDeleteDirectory(tempRoot);
+                    if (manual) MessageBox.Show("Bạn đang dùng bản mới nhất.", "Cập nhật", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    else AddLog("App đang ở bản mới nhất.");
+                    return;
+                }
+
+                var confirm = MessageBox.Show(
+                    "Có bản RcloneDrive.exe mới trên GitHub.\r\n\r\nCập nhật và mở lại app bây giờ?",
+                    "Cập nhật app",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question);
+                if (confirm != DialogResult.Yes)
+                {
+                    TryDeleteDirectory(tempRoot);
+                    AddLog("Đã bỏ qua cập nhật app.", "WARN");
+                    return;
+                }
+
+                StartSelfUpdater(newExe, tempRoot);
+                Close();
+            }
+            catch (Exception ex)
+            {
+                if (manual)
+                    MessageBox.Show("Kiểm tra/cập nhật app thất bại:\r\n" + ex.Message, "Cập nhật", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                AddLog("Cập nhật app thất bại: " + ex.Message, manual ? "ERROR" : "WARN");
+            }
+        }
+
+        private string FileSha256(string file)
+        {
+            using (var sha = SHA256.Create())
+            using (var stream = File.OpenRead(file))
+                return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "");
+        }
+
+        private void StartSelfUpdater(string newExe, string tempRoot)
+        {
+            var currentExe = Application.ExecutablePath;
+            var script = Path.Combine(tempRoot, "update-rclonedrive.cmd");
+            var lines = new[]
+            {
+                "@echo off",
+                "setlocal",
+                "set \"SRC=" + newExe + "\"",
+                "set \"DST=" + currentExe + "\"",
+                "set \"APPDIR=" + _appDir + "\"",
+                "set \"TEMPROOT=" + tempRoot + "\"",
+                "timeout /t 2 /nobreak >nul",
+                ":retry",
+                "copy /y \"%SRC%\" \"%DST%\" >nul",
+                "if errorlevel 1 (timeout /t 1 /nobreak >nul & goto retry)",
+                "start \"\" \"%DST%\"",
+                "timeout /t 2 /nobreak >nul",
+                "rd /s /q \"%TEMPROOT%\"",
+                "exit /b 0"
+            };
+            File.WriteAllLines(script, lines, Encoding.ASCII);
+            AddLog("Đang cập nhật app. App sẽ đóng và mở lại.");
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = script,
+                WorkingDirectory = _appDir,
+                CreateNoWindow = true,
+                UseShellExecute = false
+            });
+        }
+
+        private void TryDeleteDirectory(string path)
+        {
+            try { if (Directory.Exists(path)) Directory.Delete(path, true); } catch { }
         }
 
         private void LoadProfiles()
