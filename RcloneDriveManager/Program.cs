@@ -13,6 +13,7 @@ using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
@@ -21,13 +22,23 @@ namespace RcloneDriveManager
 {
     internal static class Program
     {
+        private static Mutex _singleInstanceMutex;
+
         [STAThread]
         private static void Main(string[] args)
         {
             ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+            bool createdNew;
+            _singleInstanceMutex = new Mutex(true, "RcloneDriveManager.SingleInstance", out createdNew);
+            if (!createdNew)
+            {
+                MessageBox.Show("RcloneDrive đang mở rồi.", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new MainForm(args));
+            try { _singleInstanceMutex.ReleaseMutex(); } catch { }
         }
     }
 
@@ -48,6 +59,7 @@ namespace RcloneDriveManager
         public bool NetworkMode { get; set; }
         public int Transfers { get; set; }
         public int BufferSizeMb { get; set; }
+        public string MountPreset { get; set; }
         public string ExtraArgs { get; set; }
 
         public DriveProfile()
@@ -67,6 +79,7 @@ namespace RcloneDriveManager
             NetworkMode = true;
             Transfers = 4;
             BufferSizeMb = 32;
+            MountPreset = "Nhanh/RaiDrive";
             ExtraArgs = "";
         }
 
@@ -170,6 +183,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
+        private const string AppVersion = "2026.06.10.2";
         private readonly string[] _args;
         private readonly string _appDir;
         private readonly string _rcloneExe;
@@ -197,6 +211,7 @@ namespace RcloneDriveManager
         private ComboBox remoteCombo;
         private ComboBox driveCombo;
         private ComboBox cacheModeCombo;
+        private ComboBox mountPresetCombo;
         private TextBox nameBox;
         private TextBox pathBox;
         private TextBox cacheDirBox;
@@ -219,6 +234,7 @@ namespace RcloneDriveManager
         private TextBox transferDestPathBox;
         private CheckBox dryRunBox;
         private Label statusLabel;
+        private Label versionLabel;
         private TextBox configNameBox;
         private ComboBox configTypeCombo;
         private TextBox configParamsBox;
@@ -288,7 +304,8 @@ namespace RcloneDriveManager
             titleBlock.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
             titleBlock.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
             titleBlock.Controls.Add(new Label { Text = "Trình quản lý ổ Rclone", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 15F, FontStyle.Bold), ForeColor = _text, TextAlign = ContentAlignment.BottomLeft }, 0, 0);
-            titleBlock.Controls.Add(new Label { Text = "Kết nối, mount, duyệt file và quản lý config rclone", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9F), ForeColor = _muted, TextAlign = ContentAlignment.TopLeft }, 0, 1);
+            versionLabel = new Label { Text = "Kết nối, mount, duyệt file và quản lý config rclone - v" + AppVersion, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9F), ForeColor = _muted, TextAlign = ContentAlignment.TopLeft };
+            titleBlock.Controls.Add(versionLabel, 0, 1);
             header.Controls.Add(titleBlock, 0, 0);
 
             var headerActions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, BackColor = _surface, Padding = new Padding(0, 8, 0, 0) };
@@ -347,7 +364,16 @@ namespace RcloneDriveManager
             var logPanel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = Color.FromArgb(15, 23, 42), Padding = new Padding(12) };
             logPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
             logPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            logPanel.Controls.Add(new Label { Text = "Log rclone", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(226, 232, 240), Font = new Font("Segoe UI", 10F, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
+            var logHeader = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.FromArgb(15, 23, 42) };
+            logHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            logHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 300));
+            logHeader.Controls.Add(new Label { Text = "Log rclone", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(226, 232, 240), Font = new Font("Segoe UI", 10F, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
+            var logActions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, BackColor = Color.FromArgb(15, 23, 42) };
+            logActions.Controls.Add(ActionButton("Xóa log", (s, e) => ClearLog(), _surface, _danger, 82));
+            logActions.Controls.Add(ActionButton("Copy", (s, e) => CopyLog(), _surface, _text, 70));
+            logActions.Controls.Add(ActionButton("Lỗi", (s, e) => ShowErrorLog(), _surface, _text, 60));
+            logHeader.Controls.Add(logActions, 1, 0);
+            logPanel.Controls.Add(logHeader, 0, 0);
             logBox = new TextBox
             {
                 Dock = DockStyle.Fill,
@@ -384,6 +410,7 @@ namespace RcloneDriveManager
             connectGroup.Controls.Add(ActionButton("Kết nối", async (s, e) => await MountSelectedAsync(), _primary, Color.White, 124));
             connectGroup.Controls.Add(ActionButton("Ngắt", (s, e) => UnmountSelected(), _surface, _danger, 96));
             connectGroup.Controls.Add(ActionButton("Mở ổ", (s, e) => OpenSelectedDrive(), _surface, _text, 96));
+            connectGroup.Controls.Add(ActionButton("Làm mới ổ", async (s, e) => await RefreshSelectedMountAsync(), _surface, _text, 112));
             actionBar.Controls.Add(connectGroup, 0, 0);
 
             var profileGroup = CompactButtonGroup("Profile");
@@ -399,6 +426,7 @@ namespace RcloneDriveManager
             toolGroup.Controls.Add(ActionButton("Tải về máy", async (s, e) => await DownloadRemoteToLocalAsync(), _surface, _text, 98));
             toolGroup.Controls.Add(ActionButton("Đẩy lên host", async (s, e) => await UploadLocalChangesAsync(), _primary, Color.White, 104));
             toolGroup.Controls.Add(ActionButton("Mở local", (s, e) => OpenLocalWorkspace(), _surface, _text, 84));
+            toolGroup.Controls.Add(ActionButton("Mở project", (s, e) => OpenProjectFolder(), _surface, _text, 96));
             actionBar.Controls.Add(toolGroup, 0, 2);
             pageLayout.Controls.Add(actionBar, 0, 0);
             var checks = new FlowLayoutPanel { Dock = DockStyle.Fill, Height = 46, Padding = new Padding(0, 6, 0, 4), BackColor = _surface };
@@ -410,9 +438,10 @@ namespace RcloneDriveManager
             checks.Controls.Add(networkModeBox);
             pageLayout.Controls.Add(checks, 0, 1);
 
-            var panel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 6, CellBorderStyle = TableLayoutPanelCellBorderStyle.None, BackColor = _surface };
+            var panel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 7, CellBorderStyle = TableLayoutPanelCellBorderStyle.None, BackColor = _surface };
             panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
@@ -437,10 +466,13 @@ namespace RcloneDriveManager
             cacheDirBox = AddText(panel, "Thư mục cache", "%USERPROFILE%\\.cache\\rclone", 1, 2);
             transfersBox = AddNumber(panel, "Transfers", 4, 1, 64, 0, 3);
             bufferBox = AddNumber(panel, "Bộ đệm MB", 32, 1, 1024, 1, 3);
-            cacheMaxAgeBox = AddText(panel, "Giữ cache tối đa", "72h", 0, 4);
-            writeBackBox = AddText(panel, "Upload sau khi sửa", "5s", 1, 4);
+            mountPresetCombo = AddCombo(panel, "Preset mount", 0, 4);
+            mountPresetCombo.Items.AddRange(new object[] { "Nhanh/RaiDrive", "Live" });
+            mountPresetCombo.SelectedItem = "Nhanh/RaiDrive";
+            cacheMaxAgeBox = AddText(panel, "Giữ cache tối đa", "72h", 1, 4);
+            writeBackBox = AddText(panel, "Upload sau khi sửa", "5s", 0, 5);
             extraArgsBox = new TextBox { Text = "", Height = 54, Multiline = true, ScrollBars = ScrollBars.Vertical };
-            panel.Controls.Add(Wrap("Tham số rclone thêm", extraArgsBox), 0, 5);
+            panel.Controls.Add(Wrap("Tham số rclone thêm", extraArgsBox), 0, 6);
             panel.SetColumnSpan(extraArgsBox.Parent, 2);
 
             return page;
@@ -826,6 +858,34 @@ namespace RcloneDriveManager
             logBox.AppendText(line);
             logBox.SelectionStart = logBox.TextLength;
             logBox.ScrollToCaret();
+        }
+
+        private void CopyLog()
+        {
+            if (logBox == null || string.IsNullOrEmpty(logBox.Text)) return;
+            Clipboard.SetText(logBox.Text);
+            AddLog("Đã copy log.");
+        }
+
+        private void ClearLog()
+        {
+            if (logBox == null) return;
+            logBox.Clear();
+        }
+
+        private void ShowErrorLog()
+        {
+            if (logBox == null) return;
+            var lines = logBox.Lines.Where(l => l.IndexOf("ERROR", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                l.IndexOf("WARN", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                l.IndexOf("CRITICAL", StringComparison.OrdinalIgnoreCase) >= 0).ToArray();
+            if (lines.Length == 0)
+            {
+                MessageBox.Show("Không có dòng ERROR/WARN trong log hiện tại.", "Log rclone", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            Clipboard.SetText(string.Join(Environment.NewLine, lines));
+            MessageBox.Show("Đã copy " + lines.Length + " dòng lỗi/cảnh báo vào clipboard.", "Log rclone", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void RunStartupDiagnostics()
@@ -1564,6 +1624,7 @@ namespace RcloneDriveManager
                 p.LocalWorkDir = NormalizeLocalWorkDir(p);
                 cacheMaxAgeBox.Text = string.IsNullOrWhiteSpace(p.VfsCacheMaxAge) ? "72h" : p.VfsCacheMaxAge;
                 writeBackBox.Text = string.IsNullOrWhiteSpace(p.VfsWriteBack) ? "5s" : p.VfsWriteBack;
+                SelectComboValue(mountPresetCombo, string.IsNullOrWhiteSpace(p.MountPreset) ? "Nhanh/RaiDrive" : p.MountPreset);
                 readOnlyBox.Checked = p.ReadOnly;
                 autoMountBox.Checked = p.AutoMount;
                 networkModeBox.Checked = p.NetworkMode;
@@ -1626,6 +1687,7 @@ namespace RcloneDriveManager
             p.NetworkMode = networkModeBox.Checked;
             p.Transfers = (int)transfersBox.Value;
             p.BufferSizeMb = (int)bufferBox.Value;
+            p.MountPreset = Convert.ToString(mountPresetCombo.SelectedItem ?? mountPresetCombo.Text ?? "Nhanh/RaiDrive");
             p.ExtraArgs = extraArgsBox.Text.Trim();
             SaveProfiles();
             RenderProfiles();
@@ -1636,6 +1698,7 @@ namespace RcloneDriveManager
         private void ApplyCodeIdePreset()
         {
             SelectComboValue(cacheModeCombo, "full");
+            SelectComboValue(mountPresetCombo, "Nhanh/RaiDrive");
             cacheMaxAgeBox.Text = "72h";
             writeBackBox.Text = "2s";
             transfersBox.Value = Math.Max(transfersBox.Minimum, Math.Min(transfersBox.Maximum, 1));
@@ -1671,6 +1734,7 @@ namespace RcloneDriveManager
                 NetworkMode = networkModeBox.Checked,
                 Transfers = (int)transfersBox.Value,
                 BufferSizeMb = (int)bufferBox.Value,
+                MountPreset = Convert.ToString(mountPresetCombo.SelectedItem ?? mountPresetCombo.Text ?? "Nhanh/RaiDrive"),
                 ExtraArgs = extraArgsBox.Text.Trim()
             };
             _profiles.Add(p);
@@ -1784,6 +1848,37 @@ namespace RcloneDriveManager
             EnsureLocalWorkspace(p);
             Process.Start(new ProcessStartInfo("explorer.exe", QuoteIfNeeded(NormalizeLocalWorkDir(p))) { UseShellExecute = true });
             AddLog("Đã mở thư mục local: " + NormalizeLocalWorkDir(p));
+        }
+
+        private void OpenProjectFolder()
+        {
+            var p = SelectedProfile;
+            if (p == null)
+            {
+                MessageBox.Show("Hãy chọn một profile trước.", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            var drive = ActiveDriveForProfile(p);
+            if (string.IsNullOrWhiteSpace(drive) || !IsMounted(drive))
+            {
+                MessageBox.Show("Ổ này chưa mount. Hãy kết nối trước.", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            var subPath = Prompt.Show("Nhập thư mục con cần mở trên ổ mount:", "Mở thư mục project", "public_html");
+            if (string.IsNullOrWhiteSpace(subPath)) return;
+            subPath = subPath.Trim().Trim('\\', '/').Replace('/', '\\');
+            var target = NormalizeDriveChoice(drive) + "\\";
+            if (!string.IsNullOrWhiteSpace(subPath))
+                target = Path.Combine(target, subPath);
+            try
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", QuoteIfNeeded(target)) { UseShellExecute = true });
+                AddLog("Đã mở thư mục project: " + target);
+            }
+            catch (Exception ex)
+            {
+                AddLog("Không mở được thư mục project: " + ex.Message, "ERROR");
+            }
         }
 
         private async Task DownloadRemoteToLocalAsync()
@@ -2276,6 +2371,32 @@ namespace RcloneDriveManager
             await MountProfileAsync(p);
         }
 
+        private async Task RefreshSelectedMountAsync()
+        {
+            var p = SelectedProfile;
+            if (p == null)
+            {
+                MessageBox.Show("Hãy chọn một profile trước.", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            var drive = ActiveDriveForProfile(p);
+            if (string.IsNullOrWhiteSpace(drive) || !IsMounted(drive))
+            {
+                AddLog("Ổ chưa mount, bắt đầu kết nối lại.");
+                SaveCurrentProfile();
+                await MountProfileAsync(p);
+                return;
+            }
+            AddLog("Làm mới ổ " + drive + " bằng cách ngắt và mount lại.");
+            UnmountDriveLetter(drive, p.Name);
+            CleanupMountState(p, drive);
+            RenderProfiles();
+            RefreshDriveLetters();
+            await Task.Delay(1200);
+            SaveCurrentProfile();
+            await MountProfileAsync(p);
+        }
+
         private DriveProfile CreateProfileFromCurrentFields(string forcedName = null, bool preferFreeDrive = false)
         {
             var remote = Convert.ToString(remoteCombo.SelectedItem ?? remoteCombo.Text ?? "").Trim();
@@ -2302,6 +2423,7 @@ namespace RcloneDriveManager
                 NetworkMode = networkModeBox.Checked,
                 Transfers = (int)transfersBox.Value,
                 BufferSizeMb = (int)bufferBox.Value,
+                MountPreset = Convert.ToString(mountPresetCombo.SelectedItem ?? mountPresetCombo.Text ?? "Nhanh/RaiDrive"),
                 ExtraArgs = extraArgsBox.Text.Trim()
             };
             _profiles.Add(p);
@@ -2441,13 +2563,13 @@ namespace RcloneDriveManager
             args.Add("--volname");
             args.Add(volumeName);
             args.Add("--dir-cache-time");
-            args.Add(GetDirCacheTime(remoteType));
+            args.Add(GetDirCacheTime(p, remoteType));
             args.Add("--attr-timeout");
-            args.Add(GetAttrTimeout(remoteType));
+            args.Add(GetAttrTimeout(p, remoteType));
             args.Add("--buffer-size");
             args.Add(GetBufferSizeMb(p, remoteType) + "M");
             args.Add("--vfs-read-ahead");
-            args.Add(GetReadAhead(remoteType));
+            args.Add(GetReadAhead(p, remoteType));
             args.Add("--transfers");
             args.Add(GetTransferCount(p, remoteType).ToString());
             ApplyRaiDriveLikeArgs(args, p, remoteType);
@@ -2457,8 +2579,18 @@ namespace RcloneDriveManager
             return args;
         }
 
-        private string GetDirCacheTime(string remoteType)
+        private bool IsLivePreset(DriveProfile p)
         {
+            return string.Equals(p == null ? "" : p.MountPreset, "Live", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private string GetDirCacheTime(DriveProfile p, string remoteType)
+        {
+            if (IsLivePreset(p))
+            {
+                if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase)) return "10s";
+                if (string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase)) return "15s";
+            }
             if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase))
                 return "5m";
             if (string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
@@ -2466,8 +2598,14 @@ namespace RcloneDriveManager
             return "30s";
         }
 
-        private string GetAttrTimeout(string remoteType)
+        private string GetAttrTimeout(DriveProfile p, string remoteType)
         {
+            if (IsLivePreset(p))
+            {
+                if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
+                    return "1s";
+            }
             if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
                 return "30s";
@@ -2484,8 +2622,9 @@ namespace RcloneDriveManager
             return requested;
         }
 
-        private string GetReadAhead(string remoteType)
+        private string GetReadAhead(DriveProfile p, string remoteType)
         {
+            if (IsLivePreset(p)) return "8M";
             if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
                 return "32M";
@@ -2509,9 +2648,12 @@ namespace RcloneDriveManager
                 return;
 
             AddArgIfMissing(args, p.ExtraArgs, "--use-server-modtime", null);
-            AddArgIfMissing(args, p.ExtraArgs, "--vfs-fast-fingerprint", null);
-            AddArgIfMissing(args, p.ExtraArgs, "--poll-interval", "0");
-            AddArgIfMissing(args, p.ExtraArgs, "--vfs-cache-poll-interval", "5m");
+            if (!IsLivePreset(p))
+            {
+                AddArgIfMissing(args, p.ExtraArgs, "--vfs-fast-fingerprint", null);
+                AddArgIfMissing(args, p.ExtraArgs, "--poll-interval", "0");
+                AddArgIfMissing(args, p.ExtraArgs, "--vfs-cache-poll-interval", "5m");
+            }
             AddArgIfMissing(args, p.ExtraArgs, "--daemon-timeout", "15m");
         }
 
