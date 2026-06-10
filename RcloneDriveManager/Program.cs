@@ -2290,6 +2290,7 @@ namespace RcloneDriveManager
         private List<string> BuildMountArgs(DriveProfile p, string mountDrive, string volumeName)
         {
             var args = new List<string> { "mount", p.Source, mountDrive };
+            var remoteType = GetRemoteType(p.Remote);
             if (!string.IsNullOrWhiteSpace(p.CacheMode) && !string.Equals(p.CacheMode, "off", StringComparison.OrdinalIgnoreCase))
             {
                 args.Add("--vfs-cache-mode");
@@ -2315,10 +2316,40 @@ namespace RcloneDriveManager
             args.Add("--buffer-size");
             args.Add(Math.Max(1, p.BufferSizeMb) + "M");
             args.Add("--transfers");
-            args.Add(Math.Max(1, p.Transfers).ToString());
+            args.Add(string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase)
+                ? Math.Min(2, Math.Max(1, p.Transfers)).ToString()
+                : Math.Max(1, p.Transfers).ToString());
+            ApplyFtpSafeMountArgs(args, p, remoteType);
             AddExtraArgs(args, p.ExtraArgs);
             args.Add("-v");
             return args;
+        }
+
+        private void ApplyFtpSafeMountArgs(List<string> args, DriveProfile p, string remoteType)
+        {
+            if (!string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase)) return;
+
+            AddLog("Áp dụng preset ổn định cho FTP: transfers thấp, retries cao, bỏ qua .ftpquota.");
+            AddArgIfMissing(args, p.ExtraArgs, "--checkers", "1");
+            AddArgIfMissing(args, p.ExtraArgs, "--retries", "6");
+            AddArgIfMissing(args, p.ExtraArgs, "--low-level-retries", "20");
+            AddArgIfMissing(args, p.ExtraArgs, "--timeout", "1m");
+            AddArgIfMissing(args, p.ExtraArgs, "--contimeout", "15s");
+
+            if (!HasExtraArg(p.ExtraArgs, "--exclude"))
+            {
+                args.Add("--exclude");
+                args.Add(".ftpquota");
+                args.Add("--exclude");
+                args.Add("**/.ftpquota");
+            }
+        }
+
+        private void AddArgIfMissing(List<string> args, string extra, string name, string value)
+        {
+            if (HasExtraArg(extra, name)) return;
+            args.Add(name);
+            args.Add(value);
         }
 
         private async Task<bool> TestRemoteBeforeMountAsync(string source)
@@ -2866,6 +2897,49 @@ namespace RcloneDriveManager
                 var trimmed = line.Trim();
                 if (trimmed.EndsWith(".conf", StringComparison.OrdinalIgnoreCase) && File.Exists(trimmed))
                     return trimmed;
+            }
+            return "";
+        }
+
+        private string GetRcloneConfigPathSync()
+        {
+            var output = RunCommandCapture(_rcloneExe, "config file");
+            foreach (var line in output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var trimmed = line.Trim();
+                if (trimmed.EndsWith(".conf", StringComparison.OrdinalIgnoreCase) && File.Exists(trimmed))
+                    return trimmed;
+            }
+            return "";
+        }
+
+        private string GetRemoteType(string remote)
+        {
+            var name = (remote ?? "").Trim().TrimEnd(':');
+            if (string.IsNullOrWhiteSpace(name)) return "";
+            try
+            {
+                var configPath = GetRcloneConfigPathSync();
+                if (string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath)) return "";
+                string currentSection = "";
+                foreach (var rawLine in File.ReadLines(configPath))
+                {
+                    var line = rawLine.Trim();
+                    if (line.StartsWith("[") && line.EndsWith("]"))
+                    {
+                        currentSection = line.Substring(1, line.Length - 2).Trim();
+                        continue;
+                    }
+                    if (!string.Equals(currentSection, name, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!line.StartsWith("type", StringComparison.OrdinalIgnoreCase)) continue;
+                    var idx = line.IndexOf('=');
+                    if (idx < 0) continue;
+                    return line.Substring(idx + 1).Trim();
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLog("Không đọc được loại remote " + name + ": " + ex.Message, "WARN");
             }
             return "";
         }
