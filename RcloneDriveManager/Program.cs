@@ -353,12 +353,12 @@ namespace RcloneDriveManager
                 Dock = DockStyle.Fill,
                 Multiline = true,
                 ReadOnly = true,
-                ScrollBars = ScrollBars.Both,
+                ScrollBars = ScrollBars.Vertical,
                 BackColor = Color.FromArgb(15, 23, 42),
                 ForeColor = Color.FromArgb(134, 239, 172),
                 Font = new Font("Consolas", 9.5F),
                 BorderStyle = BorderStyle.None,
-                WordWrap = false
+                WordWrap = true
             };
             logPanel.Controls.Add(logBox, 0, 1);
             root.Controls.Add(logPanel, 0, 2);
