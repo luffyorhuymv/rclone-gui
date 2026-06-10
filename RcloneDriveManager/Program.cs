@@ -269,19 +269,19 @@ namespace RcloneDriveManager
         private void BuildUi()
         {
             BackColor = _bg;
-            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2, BackColor = _bg };
+            var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, BackColor = _bg };
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 180));
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 348));
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 380));
             Controls.Add(root);
 
             var header = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = _surface, Padding = new Padding(18, 12, 18, 10), ColumnCount = 2, RowCount = 1 };
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 880));
             root.Controls.Add(header, 0, 0);
-            root.SetColumnSpan(header, 3);
+            root.SetColumnSpan(header, 2);
 
             var titleBlock = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _surface };
             titleBlock.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
@@ -360,7 +360,8 @@ namespace RcloneDriveManager
                 WordWrap = false
             };
             logPanel.Controls.Add(logBox, 0, 1);
-            root.Controls.Add(logPanel, 2, 1);
+            root.Controls.Add(logPanel, 0, 2);
+            root.SetColumnSpan(logPanel, 2);
         }
 
         private TabPage BuildDriveTab()
@@ -390,12 +391,12 @@ namespace RcloneDriveManager
             actionBar.Controls.Add(profileGroup, 0, 1);
 
             var toolGroup = CompactButtonGroup("Công cụ");
-            toolGroup.Controls.Add(ActionButton("Web UI", (s, e) => StartWebUi(), _surface, _text, 96));
-            toolGroup.Controls.Add(ActionButton("Cache", (s, e) => BrowseCacheDirForSelectedProfile(), _surface, _text, 96));
-            toolGroup.Controls.Add(ActionButton("Dọn cache", (s, e) => ClearCacheForSelectedProfile(), _surface, _danger, 112));
-            toolGroup.Controls.Add(ActionButton("Tải về máy", async (s, e) => await DownloadRemoteToLocalAsync(), _surface, _text, 112));
-            toolGroup.Controls.Add(ActionButton("Đẩy lên host", async (s, e) => await UploadLocalChangesAsync(), _primary, Color.White, 112));
-            toolGroup.Controls.Add(ActionButton("Mở local", (s, e) => OpenLocalWorkspace(), _surface, _text, 96));
+            toolGroup.Controls.Add(ActionButton("Web UI", (s, e) => StartWebUi(), _surface, _text, 84));
+            toolGroup.Controls.Add(ActionButton("Cache", (s, e) => BrowseCacheDirForSelectedProfile(), _surface, _text, 78));
+            toolGroup.Controls.Add(ActionButton("Dọn cache", (s, e) => ClearCacheForSelectedProfile(), _surface, _danger, 96));
+            toolGroup.Controls.Add(ActionButton("Tải về máy", async (s, e) => await DownloadRemoteToLocalAsync(), _surface, _text, 98));
+            toolGroup.Controls.Add(ActionButton("Đẩy lên host", async (s, e) => await UploadLocalChangesAsync(), _primary, Color.White, 104));
+            toolGroup.Controls.Add(ActionButton("Mở local", (s, e) => OpenLocalWorkspace(), _surface, _text, 84));
             actionBar.Controls.Add(toolGroup, 0, 2);
             pageLayout.Controls.Add(actionBar, 0, 0);
             var checks = new FlowLayoutPanel { Dock = DockStyle.Fill, Height = 46, Padding = new Padding(0, 6, 0, 4), BackColor = _surface };
