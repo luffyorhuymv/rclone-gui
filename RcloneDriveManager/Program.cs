@@ -243,7 +243,7 @@ namespace RcloneDriveManager
             Text = "Trình quản lý ổ Rclone";
             Width = 1420;
             Height = 840;
-            MinimumSize = new Size(1280, 760);
+            MinimumSize = new Size(1280, 820);
             StartPosition = FormStartPosition.CenterScreen;
             Font = new Font("Segoe UI", 9F);
             var iconPath = Path.Combine(_appDir, "RcloneDriveManager", "RcloneDrive.ico");
@@ -273,7 +273,7 @@ namespace RcloneDriveManager
             var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, BackColor = _bg };
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 180));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 130));
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 348));
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             Controls.Add(root);
@@ -368,10 +368,11 @@ namespace RcloneDriveManager
         private TabPage BuildDriveTab()
         {
             var page = new TabPage("Ổ đĩa") { BackColor = _surface, Padding = new Padding(18) };
-            var pageLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, BackColor = _surface };
+            page.AutoScroll = true;
+            var pageLayout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, RowCount = 3, ColumnCount = 1, BackColor = _surface };
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 520));
             page.Controls.Add(pageLayout);
 
             var actionBar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, BackColor = _surface, Padding = new Padding(0, 4, 0, 8) };
