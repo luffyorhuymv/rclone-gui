@@ -2,6 +2,13 @@
 
 Tat ca thay doi dang chu y cua RcloneDrive GUI.
 
+## 2026.06.11.1
+
+- Doi `Log rclone` sang RichTextBox de hien thi ro hon.
+- To mau log theo muc `ERROR/WARN/INFO/RCLONE/WEB`.
+- Gioi han log o 2000 dong moi nhat de app khong nang khi rclone spam loi.
+- Nho gon nut log va giu thanh cuon doc khong bi che.
+
 ## 2026.06.10.2
 
 - Them `Preset mount`: `Nhanh/RaiDrive` va `Live`.

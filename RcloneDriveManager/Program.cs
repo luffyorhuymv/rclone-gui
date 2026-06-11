@@ -183,7 +183,8 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "2026.06.10.2";
+        private const string AppVersion = "2026.06.11.1";
+        private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
         private readonly string _rcloneExe;
@@ -223,7 +224,7 @@ namespace RcloneDriveManager
         private CheckBox readOnlyBox;
         private CheckBox autoMountBox;
         private CheckBox networkModeBox;
-        private TextBox logBox;
+        private RichTextBox logBox;
         private ComboBox browseRemoteCombo;
         private TextBox browsePathBox;
         private ListView browserList;
@@ -374,17 +375,18 @@ namespace RcloneDriveManager
             logActions.Controls.Add(LogButton("Lỗi", (s, e) => ShowErrorLog(), _text, 48));
             logHeader.Controls.Add(logActions, 1, 0);
             logPanel.Controls.Add(logHeader, 0, 0);
-            logBox = new TextBox
+            logBox = new RichTextBox
             {
                 Dock = DockStyle.Fill,
-                Multiline = true,
                 ReadOnly = true,
-                ScrollBars = ScrollBars.Vertical,
+                ScrollBars = RichTextBoxScrollBars.Vertical,
                 BackColor = Color.FromArgb(15, 23, 42),
-                ForeColor = Color.FromArgb(134, 239, 172),
+                ForeColor = Color.FromArgb(203, 213, 225),
                 Font = new Font("Consolas", 9.5F),
                 BorderStyle = BorderStyle.None,
-                WordWrap = true
+                WordWrap = true,
+                DetectUrls = false,
+                HideSelection = false
             };
             logPanel.Controls.Add(logBox, 0, 1);
             root.Controls.Add(logPanel, 0, 2);
@@ -877,9 +879,43 @@ namespace RcloneDriveManager
                 return;
             }
             var line = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss") + "  " + level + "  " + message + Environment.NewLine;
-            logBox.AppendText(line);
-            logBox.SelectionStart = logBox.TextLength;
+            AppendColoredLogLine(line, level, message);
+            TrimLogLines();
             logBox.ScrollToCaret();
+        }
+
+        private void AppendColoredLogLine(string line, string level, string message)
+        {
+            if (logBox == null) return;
+            logBox.SelectionStart = logBox.TextLength;
+            logBox.SelectionLength = 0;
+            logBox.SelectionColor = LogLineColor(level, message);
+            logBox.AppendText(line);
+            logBox.SelectionColor = logBox.ForeColor;
+            logBox.SelectionStart = logBox.TextLength;
+        }
+
+        private Color LogLineColor(string level, string message)
+        {
+            var text = ((level ?? "") + " " + (message ?? "")).ToUpperInvariant();
+            if (text.Contains("CRITICAL") || text.Contains("ERROR") || text.Contains("FAILED")) return Color.FromArgb(252, 165, 165);
+            if (text.Contains("WARN") || text.Contains("NOTICE")) return Color.FromArgb(253, 224, 71);
+            if (text.Contains("MOUNTED") || text.Contains("REMOTE OK") || text.Contains("ĐÃ") || text.Contains("DA ")) return Color.FromArgb(134, 239, 172);
+            if (string.Equals(level, "RCLONE", StringComparison.OrdinalIgnoreCase)) return Color.FromArgb(147, 197, 253);
+            if (string.Equals(level, "WEB", StringComparison.OrdinalIgnoreCase)) return Color.FromArgb(196, 181, 253);
+            return Color.FromArgb(203, 213, 225);
+        }
+
+        private void TrimLogLines()
+        {
+            if (logBox == null || logBox.Lines.Length <= MaxLogLines) return;
+            var lines = logBox.Lines;
+            var keep = lines.Skip(Math.Max(0, lines.Length - MaxLogLines)).ToArray();
+            logBox.Clear();
+            logBox.SelectionColor = Color.FromArgb(148, 163, 184);
+            logBox.AppendText(DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss") + "  INFO  Đã rút gọn log, chỉ giữ " + MaxLogLines + " dòng mới nhất." + Environment.NewLine);
+            logBox.SelectionColor = logBox.ForeColor;
+            logBox.AppendText(string.Join(Environment.NewLine, keep).TrimEnd() + Environment.NewLine);
         }
 
         private void CopyLog()
