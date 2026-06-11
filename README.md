@@ -29,6 +29,13 @@ Source chính nằm tại:
 RcloneDriveManager/Program.cs
 ```
 
+## Tài liệu cho agent/IDE
+
+- `AGENTS.md`: quy tắc làm việc cho AI/IDE agent khi đọc hoặc sửa repo.
+- `CHANGELOG.md`: lịch sử tính năng/fix theo phiên bản.
+- `docs/OPERATIONS.md`: cách vận hành app, mount, update, backup/import, workflow code.
+- `docs/TROUBLESHOOTING.md`: lỗi thường gặp và cách xử lý.
+
 Build bằng Roslyn C# compiler trên Windows:
 
 ```powershell
