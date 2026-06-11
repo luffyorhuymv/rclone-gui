@@ -362,16 +362,16 @@ namespace RcloneDriveManager
             mainTabs.TabPages.Add(BuildToolsTab());
 
             var logPanel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = Color.FromArgb(15, 23, 42), Padding = new Padding(12) };
-            logPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            logPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
             logPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             var logHeader = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.FromArgb(15, 23, 42) };
             logHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            logHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 300));
+            logHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240));
             logHeader.Controls.Add(new Label { Text = "Log rclone", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(226, 232, 240), Font = new Font("Segoe UI", 10F, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
-            var logActions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, BackColor = Color.FromArgb(15, 23, 42) };
-            logActions.Controls.Add(ActionButton("Xóa log", (s, e) => ClearLog(), _surface, _danger, 82));
-            logActions.Controls.Add(ActionButton("Copy", (s, e) => CopyLog(), _surface, _text, 70));
-            logActions.Controls.Add(ActionButton("Lỗi", (s, e) => ShowErrorLog(), _surface, _text, 60));
+            var logActions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, BackColor = Color.FromArgb(15, 23, 42), Padding = new Padding(0, 3, 0, 0) };
+            logActions.Controls.Add(LogButton("Xóa log", (s, e) => ClearLog(), _danger, 68));
+            logActions.Controls.Add(LogButton("Copy", (s, e) => CopyLog(), _text, 56));
+            logActions.Controls.Add(LogButton("Lỗi", (s, e) => ShowErrorLog(), _text, 48));
             logHeader.Controls.Add(logActions, 1, 0);
             logPanel.Controls.Add(logHeader, 0, 0);
             logBox = new TextBox
@@ -770,6 +770,28 @@ namespace RcloneDriveManager
             b.FlatAppearance.BorderSize = 1;
             b.FlatAppearance.MouseOverBackColor = backColor == _surface ? Color.FromArgb(248, 250, 252) : Color.FromArgb(30, 64, 175);
             b.FlatAppearance.MouseDownBackColor = backColor == _surface ? Color.FromArgb(241, 245, 249) : Color.FromArgb(30, 58, 138);
+            b.Click += click;
+            return b;
+        }
+
+        private Button LogButton(string text, EventHandler click, Color foreColor, int width)
+        {
+            var b = new Button
+            {
+                Text = text,
+                Width = width,
+                Height = 28,
+                Margin = new Padding(3, 0, 3, 0),
+                BackColor = Color.White,
+                ForeColor = foreColor,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 8F, FontStyle.Bold),
+                Cursor = Cursors.Hand
+            };
+            b.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
+            b.FlatAppearance.BorderSize = 1;
+            b.FlatAppearance.MouseOverBackColor = Color.FromArgb(248, 250, 252);
+            b.FlatAppearance.MouseDownBackColor = Color.FromArgb(241, 245, 249);
             b.Click += click;
             return b;
         }
