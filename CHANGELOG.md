@@ -2,6 +2,11 @@
 
 Tat ca thay doi dang chu y cua RcloneDrive GUI.
 
+## 2026.06.11.2
+
+- Sua nut `Mo project` uu tien duong dan ky tu o nhu `X:\public_html` de OpenCode Desktop load dung session.
+- Cap nhat huong dan OpenCode: khong mo xen ke `X:\...` va `\\server\...` cho cung project.
+
 ## 2026.06.11.1
 
 - Doi `Log rclone` sang RichTextBox de hien thi ro hon.

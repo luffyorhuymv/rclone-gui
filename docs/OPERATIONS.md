@@ -65,8 +65,8 @@ Neu bat `Network mode`, Windows co the co duong dan UNC dang:
 
 Nen dung duy nhat mot dang duong dan cho OpenCode/Codex:
 
-- Uu tien lich su chat/session on dinh: dung UNC.
-- Uu tien terminal path ngan: dung `Z:\...` va tat Network mode.
+- OpenCode Desktop tren Windows thuong on dinh hon voi ky tu o dang `Z:\...`.
+- Mot so agent khac co the hien thi/normalize thanh UNC, nhung khong nen mo xen ke hai dang cho cung project.
 
 Khong mo xen ke `Z:\public_html` va `\\server\...\public_html` cho cung mot project vi agent/IDE co the coi la hai workspace khac nhau.
 

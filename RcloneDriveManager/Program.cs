@@ -183,7 +183,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "2026.06.11.1";
+        private const string AppVersion = "2026.06.11.2";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -1942,6 +1942,8 @@ namespace RcloneDriveManager
         private string ProjectRootForProfile(DriveProfile p, string drive)
         {
             drive = NormalizeDriveChoice(drive);
+            if (!string.IsNullOrWhiteSpace(drive) && drive.Length >= 2 && drive[1] == ':')
+                return drive.TrimEnd('\\') + "\\";
             if (p != null && p.NetworkMode)
             {
                 var displayRoot = GetDriveDisplayRoot(drive);
