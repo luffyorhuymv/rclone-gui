@@ -183,7 +183,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "2026.06.11.2";
+        private const string AppVersion = "2026.06.11.3";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -2357,6 +2357,12 @@ namespace RcloneDriveManager
             string active;
             if (_activeDrives.TryGetValue(profile, out active) && !string.IsNullOrWhiteSpace(active))
                 return active;
+            active = DetectedDriveForProfile(profile);
+            if (!string.IsNullOrWhiteSpace(active))
+            {
+                _activeDrives[profile] = active;
+                return active;
+            }
             return NormalizeDriveChoice(profile.DriveLetter);
         }
 
@@ -2398,11 +2404,33 @@ namespace RcloneDriveManager
             string drive;
             if (_activeDrives.TryGetValue(profile, out drive))
                 return IsMounted(drive);
-            if (IsAutoDrive(profile.DriveLetter)) return false;
+            if (IsAutoDrive(profile.DriveLetter))
+            {
+                drive = DetectedDriveForProfile(profile);
+                if (!string.IsNullOrWhiteSpace(drive))
+                {
+                    _activeDrives[profile] = drive;
+                    return true;
+                }
+                return false;
+            }
             var normalized = NormalizeDriveChoice(profile.DriveLetter);
             MountedDriveInfo detected;
             return _detectedRcloneDrives.TryGetValue(normalized, out detected) &&
                    string.Equals(NormalizeSourceForCompare(detected.DisplayRoot), NormalizeSourceForCompare(profile.Source), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private string DetectedDriveForProfile(DriveProfile profile)
+        {
+            if (profile == null || string.IsNullOrWhiteSpace(profile.Source)) return null;
+            foreach (var item in _detectedRcloneDrives)
+            {
+                var detected = item.Value;
+                if (detected == null) continue;
+                if (string.Equals(NormalizeSourceForCompare(detected.DisplayRoot), NormalizeSourceForCompare(profile.Source), StringComparison.OrdinalIgnoreCase))
+                    return item.Key;
+            }
+            return null;
         }
 
         private string NormalizeSourceForCompare(string source)
@@ -2590,6 +2618,11 @@ namespace RcloneDriveManager
             }
             _mounts[mountDrive] = proc;
             _activeDrives[p] = mountDrive;
+            if (IsAutoDrive(p.DriveLetter))
+            {
+                p.DriveLetter = mountDrive;
+                SaveProfiles();
+            }
             RenderProfiles();
             if (await WaitForDriveReadyAsync(mountDrive, 8000))
             {

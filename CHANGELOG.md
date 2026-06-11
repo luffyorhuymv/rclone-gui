@@ -2,6 +2,12 @@
 
 Tat ca thay doi dang chu y cua RcloneDrive GUI.
 
+## 2026.06.11.3
+
+- Nhan dien profile `AUTO` dang mount bang source rclone/process, khong chi bang ky tu o luu trong profile.
+- Khi mount thanh cong voi `AUTO`, app luu lai ky tu o that de lan sau khong doi project path.
+- Giam loi tao them o moi khi profile cu da mount nhung app vua restart.
+
 ## 2026.06.11.2
 
 - Sua nut `Mo project` uu tien duong dan ky tu o nhu `X:\public_html` de OpenCode Desktop load dung session.
