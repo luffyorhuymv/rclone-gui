@@ -329,7 +329,7 @@ namespace RcloneDriveManager
             headerActions.Controls.Add(ActionButton("Web UI", (s, e) => StartWebUi(), _surface, _text, 92));
             headerActions.Controls.Add(ActionButton("Làm mới", async (s, e) => await RefreshAllAsync(), _surface, _text, 104));
             headerActions.Controls.Add(ActionButton("Ngắt", (s, e) => UnmountSelected(), _surface, _danger, 86));
-            headerActions.Controls.Add(ActionButton("Kết nối", async (s, e) => await MountSelectedAsync(), _primary, Color.White, 112));
+            headerActions.Controls.Add(ActionButton("Kết nối", async (s, e) => await SaveAndMountCurrentProfileAsync(), _primary, Color.White, 112));
             header.Controls.Add(headerActions, 1, 0);
 
             var left = new Panel { Dock = DockStyle.Fill, BackColor = _surface, Padding = new Padding(18, 18, 14, 18) };
@@ -425,7 +425,7 @@ namespace RcloneDriveManager
             actionBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
 
             var connectGroup = CompactButtonGroup("Kết nối");
-            connectGroup.Controls.Add(ActionButton("Kết nối", async (s, e) => await MountSelectedAsync(), _primary, Color.White, 124));
+            connectGroup.Controls.Add(ActionButton("Kết nối", async (s, e) => await SaveAndMountCurrentProfileAsync(), _primary, Color.White, 104));
             connectGroup.Controls.Add(ActionButton("Ngắt", (s, e) => UnmountSelected(), _surface, _danger, 96));
             connectGroup.Controls.Add(ActionButton("Mở ổ", (s, e) => OpenSelectedDrive(), _surface, _text, 96));
             connectGroup.Controls.Add(ActionButton("Làm mới ổ", async (s, e) => await RefreshSelectedMountAsync(), _surface, _text, 112));
@@ -433,6 +433,7 @@ namespace RcloneDriveManager
 
             var profileGroup = CompactButtonGroup("Profile");
             profileGroup.Controls.Add(ActionButton("Lưu", (s, e) => SaveCurrentProfile(), _surface, _text, 86));
+            profileGroup.Controls.Add(ActionButton("Lưu & kết nối", async (s, e) => await SaveAndMountCurrentProfileAsync(), _primary, Color.White, 124));
             profileGroup.Controls.Add(ActionButton("Cài đặt", (s, e) => OpenDriveSettingsDialog(), _surface, _text, 96));
             profileGroup.Controls.Add(ActionButton("Code IDE", (s, e) => ApplyCodeIdePreset(), _surface, _text, 104));
             actionBar.Controls.Add(profileGroup, 0, 1);
@@ -2873,6 +2874,11 @@ namespace RcloneDriveManager
 
         private async Task MountSelectedAsync()
         {
+            await SaveAndMountCurrentProfileAsync();
+        }
+
+        private async Task SaveAndMountCurrentProfileAsync()
+        {
             var p = SelectedProfile;
             if (p == null)
             {
@@ -2883,7 +2889,7 @@ namespace RcloneDriveManager
                     OpenDriveInExplorer(external.DriveLetter);
                     return;
                 }
-                p = CreateProfileFromCurrentFields();
+                p = CreateProfileFromCurrentFields(null, false, true);
             }
             else
             {
@@ -2895,8 +2901,10 @@ namespace RcloneDriveManager
                     return;
                 }
                 SaveCurrentProfile();
+                p = SelectedProfile ?? p;
             }
             if (p == null) return;
+            AddLog("Đã lưu cấu hình, bắt đầu kết nối: " + p.Name);
             await MountProfileAsync(p);
         }
 
@@ -2926,7 +2934,7 @@ namespace RcloneDriveManager
             await MountProfileAsync(p);
         }
 
-        private DriveProfile CreateProfileFromCurrentFields(string forcedName = null, bool preferFreeDrive = false)
+        private DriveProfile CreateProfileFromCurrentFields(string forcedName = null, bool preferFreeDrive = false, bool keepTypedName = false)
         {
             var remote = Convert.ToString(remoteCombo.SelectedItem ?? remoteCombo.Text ?? "").Trim();
             if (string.IsNullOrWhiteSpace(remote))
@@ -2935,10 +2943,13 @@ namespace RcloneDriveManager
                 SelectTab("Ổ đĩa");
                 return null;
             }
+            var typedName = string.IsNullOrWhiteSpace(nameBox.Text) ? remote.TrimEnd(':') : nameBox.Text.Trim();
             var p = new DriveProfile
             {
                 Name = string.IsNullOrWhiteSpace(forcedName)
-                    ? UniqueProfileName(string.IsNullOrWhiteSpace(nameBox.Text) ? remote.TrimEnd(':') : nameBox.Text.Trim())
+                    ? (keepTypedName && !_profiles.Any(x => string.Equals(x.Name, typedName, StringComparison.OrdinalIgnoreCase))
+                        ? typedName
+                        : UniqueProfileName(typedName))
                     : forcedName.Trim(),
                 Remote = remote,
                 RemotePath = DriveProfile.NormalizeRemotePath(pathBox.Text, remote),
