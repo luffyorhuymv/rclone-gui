@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.2";
+        private const string AppVersion = "1.0.3";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -281,13 +281,14 @@ namespace RcloneDriveManager
             Width = 1366;
             Height = 840;
             MinimumSize = new Size(1280, 820);
-            StartPosition = FormStartPosition.CenterScreen;
+            StartPosition = FormStartPosition.Manual;
             Font = new Font("Segoe UI", 9F);
             var iconPath = Path.Combine(_appDir, "RcloneDriveManager", "RcloneDrive.ico");
             if (File.Exists(iconPath))
                 Icon = new Icon(iconPath);
 
             BuildUi();
+            Shown += (s, e) => CenterOnActiveScreen();
             Load += async (s, e) =>
             {
                 LoadProfiles();
@@ -451,6 +452,22 @@ namespace RcloneDriveManager
             logPanel.Controls.Add(logBox, 0, 1);
             root.Controls.Add(logPanel, 0, 2);
             root.SetColumnSpan(logPanel, 2);
+        }
+
+        private void CenterOnActiveScreen()
+        {
+            var screen = Screen.FromPoint(Cursor.Position);
+            if (screen == null)
+                screen = Screen.PrimaryScreen;
+            var area = screen.WorkingArea;
+            var targetWidth = Math.Min(1366, Math.Max(MinimumSize.Width, area.Width - 24));
+            var targetHeight = Math.Min(840, Math.Max(MinimumSize.Height, area.Height - 24));
+            if (targetWidth < Width || Width > area.Width)
+                Width = targetWidth;
+            if (targetHeight < Height || Height > area.Height)
+                Height = targetHeight;
+            Left = area.Left + Math.Max(0, (area.Width - Width) / 2);
+            Top = area.Top + Math.Max(0, (area.Height - Height) / 2);
         }
 
         private TabPage BuildDriveTab()
