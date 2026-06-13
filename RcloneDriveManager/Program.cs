@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.10";
+        private const string AppVersion = "1.0.11";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -1011,27 +1011,13 @@ namespace RcloneDriveManager
             var compactLayout = bounds.Width < 430;
             var actionRects = GetDriveRowActionRects(bounds);
             var actionLeft = actionRects.Count == 0 ? bounds.Right - 8 : actionRects.Min(r => r.Left);
-            var textLeft = bounds.Left + 88;
+            var textLeft = bounds.Left + 50;
             var textRight = compactLayout ? bounds.Right - 10 : actionLeft - 10;
             var textWidth = Math.Max(24, textRight - textLeft);
 
-            var iconRect = new Rectangle(bounds.Left + 20, bounds.Top + 14, 22, 28);
-            using (var iconPen = new Pen(mounted ? Color.FromArgb(230, 230, 230) : Color.FromArgb(185, 185, 185), 1.5F))
-            {
-                g.DrawLine(iconPen, iconRect.Left, iconRect.Top, iconRect.Right - 7, iconRect.Top);
-                g.DrawLine(iconPen, iconRect.Right - 7, iconRect.Top, iconRect.Right, iconRect.Top + 7);
-                g.DrawLine(iconPen, iconRect.Right, iconRect.Top + 7, iconRect.Right, iconRect.Bottom);
-                g.DrawLine(iconPen, iconRect.Right, iconRect.Bottom, iconRect.Left, iconRect.Bottom);
-                g.DrawLine(iconPen, iconRect.Left, iconRect.Bottom, iconRect.Left, iconRect.Top);
-                g.DrawLine(iconPen, iconRect.Right - 7, iconRect.Top, iconRect.Right - 7, iconRect.Top + 7);
-                g.DrawLine(iconPen, iconRect.Right - 7, iconRect.Top + 7, iconRect.Right, iconRect.Top + 7);
-            }
-
-            var driveRect = new Rectangle(bounds.Left + 58, bounds.Top + 16, 26, 18);
-            using (var pen = new Pen(Color.FromArgb(160, 160, 160)))
-                g.DrawRectangle(pen, driveRect);
+            var driveRect = new Rectangle(bounds.Left + 16, bounds.Top + 16, 28, 18);
             TextRenderer.DrawText(g, IsAutoDrive(drive) ? "A:" : drive, new Font("Segoe UI", 7.6F, FontStyle.Bold),
-                driveRect, Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                driveRect, Color.White, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
             TextRenderer.DrawText(g, name, new Font("Segoe UI", 9.3F, FontStyle.Bold),
                 new Rectangle(textLeft, bounds.Top + 8, textWidth, 20),
