@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.18";
+        private const string AppVersion = "1.0.19";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -3222,8 +3222,9 @@ namespace RcloneDriveManager
                 form.MaximizeBox = false;
                 form.FormBorderStyle = FormBorderStyle.FixedDialog;
                 form.Font = new Font("Segoe UI", 9F);
+                form.BackColor = _surface;
 
-                var layout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Padding = new Padding(14) };
+                var layout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Padding = new Padding(14), BackColor = _surface };
                 layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
                 layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
                 form.Controls.Add(layout);
@@ -3235,7 +3236,7 @@ namespace RcloneDriveManager
                 var dCacheMode = DialogCombo(layout, "Chế độ VFS cache", new[] { "off", "minimal", "writes", "full" }, p.CacheMode, 0, 2, false);
                 var dCacheDir = DialogText(layout, "Thư mục cache", p.CacheDir, 1, 2);
                 var dLocalDir = DialogText(layout, "Thư mục local", NormalizeLocalWorkDir(p), 0, 3);
-                var cachePicker = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 38, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(14, 0, 14, 0) };
+                var cachePicker = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 38, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(14, 0, 14, 0), BackColor = _surface };
                 cachePicker.Controls.Add(ActionButton("Browse cache", (s, e) =>
                 {
                     var picked = PickCacheDirectory(dCacheDir.Text);
@@ -3255,7 +3256,7 @@ namespace RcloneDriveManager
                 var dExtra = DialogText(layout, "Tham số rclone thêm", p.ExtraArgs ?? "", 1, 5);
                 layout.SetColumnSpan(dExtra.Parent, 2);
 
-                var checks = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 54, Padding = new Padding(14, 8, 14, 4) };
+                var checks = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 54, Padding = new Padding(14, 8, 14, 4), BackColor = _surface };
                 var dReadOnly = new CheckBox { Text = "Chỉ đọc", Width = 90, Checked = p.ReadOnly };
                 var dAuto = new CheckBox { Text = "Tự mount khi mở app", Width = 180, Checked = p.AutoMount };
                 var dNetwork = new CheckBox { Text = "Network mode", Width = 130, Checked = p.NetworkMode };
@@ -3270,12 +3271,13 @@ namespace RcloneDriveManager
                     Dock = DockStyle.Top,
                     Height = 58,
                     Padding = new Padding(14, 8, 14, 0),
+                    BackColor = _surface,
                     Text = "Cài đặt này áp dụng cho profile đang chọn. Nếu ổ đang mount, hãy Ngắt rồi Kết nối lại để nhận cấu hình mới."
                 };
                 form.Controls.Add(note);
                 note.BringToFront();
 
-                var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 58, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(14, 10, 14, 10) };
+                var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 58, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(14, 10, 14, 10), BackColor = _surface };
                 var ok = ActionButton("Lưu", (s, e) => {}, _primary, Color.White, 96);
                 ok.DialogResult = DialogResult.OK;
                 var cancel = ActionButton("Hủy", (s, e) => {}, _surface, _text, 96);
