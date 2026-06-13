@@ -297,7 +297,9 @@ namespace RcloneDriveManager
                 SelectFirstProfile();
                 _ = CheckForAppUpdateOnStartupAsync();
                 if (_args.Any(a => string.Equals(a, "--automount", StringComparison.OrdinalIgnoreCase)))
-                    await MountAutoProfilesAsync();
+                    await MountAutoProfilesAsync(true);
+                else
+                    await MountAutoProfilesAsync(false);
             };
             FormClosing += (s, e) => SaveProfiles();
         }
@@ -363,7 +365,7 @@ namespace RcloneDriveManager
                 OwnerDraw = true,
                 HeaderStyle = ColumnHeaderStyle.None,
                 ShowItemToolTips = true,
-                SmallImageList = new ImageList { ImageSize = new Size(1, 58) }
+                SmallImageList = new ImageList { ImageSize = new Size(1, 72) }
             };
             profileList.Columns.Add("Ổ", 316);
             profileList.DrawColumnHeader += (s, e) => e.DrawDefault = false;
@@ -882,6 +884,13 @@ namespace RcloneDriveManager
             using (var accentBrush = new SolidBrush(accent))
                 g.FillRectangle(accentBrush, bounds.Left, bounds.Top, 5, bounds.Height);
 
+            var compactLayout = bounds.Width < 380;
+            var actionRects = GetDriveRowActionRects(bounds);
+            var actionLeft = actionRects.Count == 0 ? bounds.Right - 8 : actionRects.Min(r => r.Left);
+            var textLeft = bounds.Left + 88;
+            var textRight = compactLayout ? bounds.Right - 10 : actionLeft - 10;
+            var textWidth = Math.Max(24, textRight - textLeft);
+
             var iconRect = new Rectangle(bounds.Left + 14, bounds.Top + 12, 28, 34);
             using (var iconBrush = new SolidBrush(Color.White))
                 g.FillRectangle(iconBrush, iconRect);
@@ -899,19 +908,17 @@ namespace RcloneDriveManager
             TextRenderer.DrawText(g, IsAutoDrive(drive) ? "A:" : drive, new Font("Segoe UI", 7.6F, FontStyle.Bold),
                 driveRect, Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
-            var actionRects = GetDriveRowActionRects(bounds);
-            var actionLeft = actionRects.Count == 0 ? bounds.Right - 8 : actionRects.Min(r => r.Left);
-            var textWidth = Math.Max(24, actionLeft - (bounds.Left + 88) - 10);
-
             TextRenderer.DrawText(g, name, new Font("Segoe UI", 9.3F, FontStyle.Bold),
-                new Rectangle(bounds.Left + 88, bounds.Top + 8, textWidth, 20),
+                new Rectangle(textLeft, bounds.Top + 8, textWidth, 20),
                 Color.White, TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
 
             TextRenderer.DrawText(g, source, new Font("Segoe UI", 7.5F),
-                new Rectangle(bounds.Left + 88, bounds.Top + 28, textWidth, 18),
+                new Rectangle(textLeft, bounds.Top + 28, textWidth, 18),
                 Color.FromArgb(150, 150, 150), TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
 
-            var barRect = new Rectangle(bounds.Left + 88, bounds.Bottom - 15, textWidth, 5);
+            var barRight = compactLayout ? actionLeft - 8 : textLeft + textWidth;
+            var barWidth = Math.Max(28, barRight - textLeft);
+            var barRect = new Rectangle(textLeft, bounds.Bottom - 18, barWidth, 5);
             using (var barBack = new SolidBrush(Color.FromArgb(82, 82, 82)))
                 g.FillRectangle(barBack, barRect);
             if (usedRatio.HasValue)
@@ -922,14 +929,9 @@ namespace RcloneDriveManager
             }
 
             TextRenderer.DrawText(g, capacityText, new Font("Segoe UI", 7.8F),
-                new Rectangle(bounds.Left + 88, bounds.Bottom - 31, textWidth, 16),
+                new Rectangle(textLeft, bounds.Bottom - 35, barWidth, 16),
                 Color.FromArgb(190, 190, 190),
                 TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
-
-            TextRenderer.DrawText(g, status, new Font("Segoe UI", 7F, FontStyle.Bold),
-                new Rectangle(actionLeft, bounds.Bottom - 20, bounds.Right - actionLeft - 6, 15),
-                mounted ? Color.FromArgb(190, 255, 210) : Color.FromArgb(170, 170, 170),
-                TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
             DrawDriveRowAction(g, actionRects[0], mounted ? "■" : "▶", mounted ? "Ngắt" : "Kết nối", mounted ? _danger : _success);
             DrawDriveRowAction(g, actionRects[1], "⚙", "Cài đặt", Color.FromArgb(120, 120, 120));
@@ -943,7 +945,9 @@ namespace RcloneDriveManager
             var medium = bounds.Width < 430;
             var size = compact ? 26 : medium ? 30 : 34;
             var gap = compact ? 5 : medium ? 7 : 10;
-            var top = bounds.Top + Math.Max(6, (bounds.Height - size) / 2);
+            var top = compact
+                ? bounds.Bottom - size - 8
+                : bounds.Top + Math.Max(6, (bounds.Height - size) / 2);
             var right = bounds.Right - (compact ? 6 : 12);
             var rects = new List<Rectangle>();
             for (var i = 0; i < 4; i++)
@@ -974,31 +978,58 @@ namespace RcloneDriveManager
             var rects = GetDriveRowActionRects(bounds);
             var action = rects.FindIndex(r => r.Contains(e.Location));
             if (action < 0) return;
+            var profile = item.Tag as DriveProfile;
+            var external = item.Tag as MountedDriveInfo;
 
             if (action == 0)
             {
-                if (SelectedProfile != null && IsMountedProfile(SelectedProfile))
-                    UnmountSelected();
-                else if (SelectedMountedDrive != null)
-                    UnmountSelected();
-                else
-                    await SaveAndMountCurrentProfileAsync();
+                if (profile != null)
+                {
+                    SelectProfile(profile);
+                    if (IsMountedProfile(profile)) UnmountSelected();
+                    else await SaveAndMountCurrentProfileAsync();
+                }
+                else if (external != null)
+                {
+                    UnmountDriveLetter(external.DriveLetter, external.Name);
+                    AddLog("Đã gửi lệnh ngắt ổ đang bật sẵn: " + external.DriveLetter);
+                    RenderProfiles();
+                }
                 return;
             }
             if (action == 1)
             {
-                if (SelectedProfile != null) OpenDriveSettingsDialog();
+                if (profile != null)
+                {
+                    SelectProfile(profile);
+                    OpenDriveSettingsDialog();
+                }
                 return;
             }
             if (action == 2)
             {
-                OpenSelectedDrive();
+                if (profile != null)
+                {
+                    SelectProfile(profile);
+                    OpenSelectedDrive();
+                }
+                else if (external != null)
+                    OpenDriveInExplorer(external.DriveLetter);
                 return;
             }
             if (action == 3)
             {
-                if (SelectedProfile != null) DeleteCurrentProfile();
-                else UnmountSelected();
+                if (profile != null)
+                {
+                    SelectProfile(profile);
+                    DeleteCurrentProfile();
+                }
+                else if (external != null)
+                {
+                    UnmountDriveLetter(external.DriveLetter, external.Name);
+                    AddLog("Đã gửi lệnh ngắt ổ đang bật sẵn: " + external.DriveLetter);
+                    RenderProfiles();
+                }
             }
         }
 
@@ -3966,17 +3997,20 @@ namespace RcloneDriveManager
             OpenDriveInExplorer(drive);
         }
 
-        private async Task MountAutoProfilesAsync()
+        private async Task MountAutoProfilesAsync(bool includeAlwaysAutoMount)
         {
             var pending = _profiles
-                .Where(x => !string.IsNullOrWhiteSpace(x.Remote) && (x.AutoMount || x.RestoreOnStartup))
+                .Where(x => !string.IsNullOrWhiteSpace(x.Remote) &&
+                            (x.RestoreOnStartup || (includeAlwaysAutoMount && x.AutoMount)))
                 .ToList();
             if (pending.Count == 0)
             {
-                AddLog("Không có profile cần tự mount khi khởi động.");
+                AddLog(includeAlwaysAutoMount
+                    ? "Không có profile cần tự mount khi khởi động."
+                    : "Không có ổ đã lưu để tự mount lại.");
                 return;
             }
-            AddLog("Tự mount " + pending.Count + " profile khi khởi động...");
+            AddLog((includeAlwaysAutoMount ? "Tự mount " : "Mount lại ") + pending.Count + " profile đã lưu...");
             foreach (var p in pending)
                 await MountProfileAsync(p);
         }
