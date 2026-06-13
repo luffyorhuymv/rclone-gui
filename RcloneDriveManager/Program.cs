@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.7";
+        private const string AppVersion = "1.0.8";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -2288,7 +2288,13 @@ namespace RcloneDriveManager
             p.Name = string.IsNullOrWhiteSpace(nameBox.Text) ? "Ổ đĩa" : nameBox.Text.Trim();
             p.Remote = Convert.ToString(remoteCombo.SelectedItem ?? remoteCombo.Text ?? "").Trim();
             p.RemotePath = DriveProfile.NormalizeRemotePath(pathBox.Text, p.Remote);
-            p.DriveLetter = NormalizeDriveChoice(Convert.ToString(driveCombo.SelectedItem ?? driveCombo.Text ?? "AUTO"));
+            var driveChoice = NormalizeDriveChoice(Convert.ToString(driveCombo.SelectedItem ?? driveCombo.Text ?? "AUTO"));
+            if (IsDriveReservedByAnotherProfile(driveChoice, p))
+            {
+                MessageBox.Show("Ký tự ổ " + driveChoice + " đang được profile khác trong app giữ. Hãy chọn ổ khác hoặc Tự chọn ổ trống.", "Trùng ký tự ổ", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            p.DriveLetter = driveChoice;
             p.CacheMode = Convert.ToString(cacheModeCombo.SelectedItem ?? "full");
             p.CacheDir = cacheDirBox.Text.Trim();
             p.LocalWorkDir = NormalizeLocalWorkDir(p);
@@ -3077,7 +3083,7 @@ namespace RcloneDriveManager
                 var dName = DialogText(layout, "Tên profile", p.Name, 0, 0);
                 var dRemote = DialogCombo(layout, "Remote", _remotes, p.Remote, 1, 0, true);
                 var dPath = DialogText(layout, "Đường dẫn remote", p.RemotePath, 0, 1);
-                var dDrive = DialogCombo(layout, "Ký tự ổ đĩa", new[] { "Tự chọn ổ trống" }.Concat(GetFreeDriveLetters(p)).Concat(new[] { p.DriveLetter, "Z:", "Y:", "X:", "W:" }).Distinct(StringComparer.OrdinalIgnoreCase), IsAutoDrive(p.DriveLetter) ? "Tự chọn ổ trống" : p.DriveLetter, 1, 1, true);
+                var dDrive = DialogCombo(layout, "Ký tự ổ đĩa", new[] { "Tự chọn ổ trống" }.Concat(GetDriveLetterChoices(p, p.DriveLetter)), IsAutoDrive(p.DriveLetter) ? "Tự chọn ổ trống" : p.DriveLetter, 1, 1, true);
                 var dCacheMode = DialogCombo(layout, "Chế độ VFS cache", new[] { "off", "minimal", "writes", "full" }, p.CacheMode, 0, 2, false);
                 var dCacheDir = DialogText(layout, "Thư mục cache", p.CacheDir, 1, 2);
                 var dLocalDir = DialogText(layout, "Thư mục local", NormalizeLocalWorkDir(p), 0, 3);
@@ -3135,7 +3141,13 @@ namespace RcloneDriveManager
                 p.Name = string.IsNullOrWhiteSpace(dName.Text) ? "Ổ đĩa" : dName.Text.Trim();
                 p.Remote = Convert.ToString(dRemote.SelectedItem ?? dRemote.Text ?? "").Trim();
                 p.RemotePath = DriveProfile.NormalizeRemotePath(dPath.Text, p.Remote);
-                p.DriveLetter = NormalizeDriveChoice(Convert.ToString(dDrive.SelectedItem ?? dDrive.Text ?? "AUTO"));
+                var driveChoice = NormalizeDriveChoice(Convert.ToString(dDrive.SelectedItem ?? dDrive.Text ?? "AUTO"));
+                if (IsDriveReservedByAnotherProfile(driveChoice, p))
+                {
+                    MessageBox.Show("Ký tự ổ " + driveChoice + " đang được profile khác trong app giữ. Hãy chọn ổ khác hoặc Tự chọn ổ trống.", "Trùng ký tự ổ", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                p.DriveLetter = driveChoice;
                 p.CacheMode = Convert.ToString(dCacheMode.SelectedItem ?? dCacheMode.Text ?? "full").Trim();
                 p.CacheDir = dCacheDir.Text.Trim();
                 p.LocalWorkDir = string.IsNullOrWhiteSpace(dLocalDir.Text) ? GetDefaultLocalWorkDir(p.Name) : dLocalDir.Text.Trim();
@@ -3249,10 +3261,29 @@ namespace RcloneDriveManager
             var selectedProfile = SelectedProfile;
             driveCombo.Items.Clear();
             driveCombo.Items.Add("Tự chọn ổ trống");
-            foreach (var d in GetFreeDriveLetters(selectedProfile).Concat(new[] { old, "Z:", "Y:", "X:", "W:" }).Where(d => !string.IsNullOrWhiteSpace(d)).Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var d in GetDriveLetterChoices(selectedProfile, old))
                 driveCombo.Items.Add(d);
             if (!string.IsNullOrWhiteSpace(old)) SelectComboValue(driveCombo, old);
             if (driveCombo.SelectedIndex < 0 && driveCombo.Items.Count > 0) driveCombo.SelectedIndex = 0;
+        }
+
+        private IEnumerable<string> GetDriveLetterChoices(DriveProfile exceptProfile, string current)
+        {
+            var choices = GetFreeDriveLetters(exceptProfile).ToList();
+            var normalizedCurrent = NormalizeDriveChoice(current);
+            if (!IsAutoDrive(normalizedCurrent) &&
+                !IsDriveReservedByAnotherProfile(normalizedCurrent, exceptProfile) &&
+                !choices.Contains(normalizedCurrent, StringComparer.OrdinalIgnoreCase))
+                choices.Add(normalizedCurrent);
+
+            foreach (var drive in new[] { "Z:", "Y:", "X:", "W:" })
+            {
+                if (IsDriveReservedByAnotherProfile(drive, exceptProfile)) continue;
+                if (!IsDriveAvailableForMount(drive, exceptProfile)) continue;
+                if (!choices.Contains(drive, StringComparer.OrdinalIgnoreCase))
+                    choices.Add(drive);
+            }
+            return choices.Where(d => !string.IsNullOrWhiteSpace(d)).Distinct(StringComparer.OrdinalIgnoreCase);
         }
 
         private IEnumerable<string> GetFreeDriveLetters()
@@ -3288,6 +3319,13 @@ namespace RcloneDriveManager
                 if (!string.IsNullOrWhiteSpace(pair.Value) && !IsAutoDrive(pair.Value))
                     yield return NormalizeDriveChoice(pair.Value);
             }
+        }
+
+        private bool IsDriveReservedByAnotherProfile(string drive, DriveProfile exceptProfile)
+        {
+            if (IsAutoDrive(drive)) return false;
+            var normalized = NormalizeDriveChoice(drive);
+            return GetReservedProfileDriveLetters(exceptProfile).Any(d => string.Equals(d, normalized, StringComparison.OrdinalIgnoreCase));
         }
 
         private bool IsAutoDrive(string drive)
