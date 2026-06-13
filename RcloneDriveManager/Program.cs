@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "2026.06.11.3";
+        private const string AppVersion = "1.0.0";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -276,7 +276,7 @@ namespace RcloneDriveManager
             _profilesFile = Path.Combine(_dataDir, "profiles.json");
 
             Text = "Trình quản lý ổ Rclone";
-            Width = 1420;
+            Width = 1366;
             Height = 840;
             MinimumSize = new Size(1280, 820);
             StartPosition = FormStartPosition.CenterScreen;
@@ -311,7 +311,7 @@ namespace RcloneDriveManager
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 130));
-            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 348));
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 430));
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             Controls.Add(root);
 
@@ -365,9 +365,9 @@ namespace RcloneDriveManager
                 OwnerDraw = true,
                 HeaderStyle = ColumnHeaderStyle.None,
                 ShowItemToolTips = true,
-                SmallImageList = new ImageList { ImageSize = new Size(1, 72) }
+                SmallImageList = new ImageList { ImageSize = new Size(1, 82) }
             };
-            profileList.Columns.Add("Ổ", 316);
+            profileList.Columns.Add("Ổ", 398);
             profileList.DrawColumnHeader += (s, e) => e.DrawDefault = false;
             profileList.DrawItem += DrawDriveListItem;
             profileList.DrawSubItem += DrawDriveListSubItem;
@@ -884,7 +884,7 @@ namespace RcloneDriveManager
             using (var accentBrush = new SolidBrush(accent))
                 g.FillRectangle(accentBrush, bounds.Left, bounds.Top, 5, bounds.Height);
 
-            var compactLayout = bounds.Width < 380;
+            var compactLayout = bounds.Width < 430;
             var actionRects = GetDriveRowActionRects(bounds);
             var actionLeft = actionRects.Count == 0 ? bounds.Right - 8 : actionRects.Min(r => r.Left);
             var textLeft = bounds.Left + 88;
@@ -941,8 +941,8 @@ namespace RcloneDriveManager
 
         private List<Rectangle> GetDriveRowActionRects(Rectangle bounds)
         {
-            var compact = bounds.Width < 360;
-            var medium = bounds.Width < 430;
+            var compact = bounds.Width < 430;
+            var medium = bounds.Width < 500;
             var size = compact ? 26 : medium ? 30 : 34;
             var gap = compact ? 5 : medium ? 7 : 10;
             var top = compact
