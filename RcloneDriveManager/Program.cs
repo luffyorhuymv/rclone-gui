@@ -845,6 +845,8 @@ namespace RcloneDriveManager
             var drive = "";
             var source = "";
             var status = "Rảnh";
+            var capacityText = "Dung lượng chưa xác định";
+            double? usedRatio = null;
 
             var profile = item.Tag as DriveProfile;
             if (profile != null)
@@ -854,6 +856,8 @@ namespace RcloneDriveManager
                 drive = DriveDisplay(profile);
                 source = profile.Remote + DriveProfile.NormalizeRemotePath(profile.RemotePath, profile.Remote);
                 status = mounted ? "Đang kết nối" : "Chưa kết nối";
+                if (mounted)
+                    capacityText = TryGetDriveCapacityText(drive, out usedRatio);
             }
             else
             {
@@ -865,6 +869,7 @@ namespace RcloneDriveManager
                     drive = external.DriveLetter;
                     source = external.DisplayRoot;
                     status = "Đang bật";
+                    capacityText = TryGetDriveCapacityText(drive, out usedRatio);
                 }
             }
 
@@ -904,12 +909,16 @@ namespace RcloneDriveManager
             var barRect = new Rectangle(bounds.Left + 88, bounds.Bottom - 15, bounds.Width - 178, 5);
             using (var barBack = new SolidBrush(Color.FromArgb(82, 82, 82)))
                 g.FillRectangle(barBack, barRect);
-            using (var barFill = new SolidBrush(mounted ? Color.FromArgb(120, 120, 120) : Color.FromArgb(70, 70, 70)))
-                g.FillRectangle(barFill, barRect.Left, barRect.Top, Math.Max(16, barRect.Width / 3), barRect.Height);
+            if (usedRatio.HasValue)
+            {
+                var fillWidth = Math.Max(1, Math.Min(barRect.Width, (int)Math.Round(barRect.Width * usedRatio.Value)));
+                using (var barFill = new SolidBrush(Color.FromArgb(150, 150, 150)))
+                    g.FillRectangle(barFill, barRect.Left, barRect.Top, fillWidth, barRect.Height);
+            }
 
-            TextRenderer.DrawText(g, status, new Font("Segoe UI", 7.8F),
+            TextRenderer.DrawText(g, capacityText, new Font("Segoe UI", 7.8F),
                 new Rectangle(bounds.Left + 88, bounds.Bottom - 31, bounds.Width - 178, 16),
-                mounted ? Color.FromArgb(190, 255, 210) : Color.FromArgb(190, 190, 190),
+                Color.FromArgb(190, 190, 190),
                 TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
 
             var stateRect = new Rectangle(bounds.Right - 72, bounds.Top + 16, 44, 24);
@@ -923,6 +932,33 @@ namespace RcloneDriveManager
                 new Rectangle(stateRect.Left + 26, stateRect.Top + 4, 28, 18),
                 mounted ? Color.FromArgb(190, 255, 210) : Color.FromArgb(180, 180, 180),
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+
+            TextRenderer.DrawText(g, status, new Font("Segoe UI", 7F, FontStyle.Bold),
+                new Rectangle(bounds.Right - 86, bounds.Bottom - 20, 78, 15),
+                mounted ? Color.FromArgb(190, 255, 210) : Color.FromArgb(170, 170, 170),
+                TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        }
+
+        private string TryGetDriveCapacityText(string drive, out double? usedRatio)
+        {
+            usedRatio = null;
+            try
+            {
+                if (string.IsNullOrWhiteSpace(drive) || IsAutoDrive(drive))
+                    return "Dung lượng chưa xác định";
+                var root = NormalizeDriveChoice(drive) + "\\";
+                var info = new DriveInfo(root);
+                if (!info.IsReady || info.TotalSize <= 0)
+                    return "Dung lượng chưa xác định";
+
+                var used = Math.Max(0, info.TotalSize - info.AvailableFreeSpace);
+                usedRatio = Math.Max(0, Math.Min(1, used / (double)info.TotalSize));
+                return FormatBytes(info.AvailableFreeSpace) + " trống của " + FormatBytes(info.TotalSize);
+            }
+            catch
+            {
+                return "Dung lượng chưa xác định";
+            }
         }
 
         private void UpdateConnectButtonState()
