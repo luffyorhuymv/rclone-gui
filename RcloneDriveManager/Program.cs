@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.8";
+        private const string AppVersion = "1.0.9";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -1016,9 +1016,11 @@ namespace RcloneDriveManager
             var textWidth = Math.Max(24, textRight - textLeft);
 
             var iconRect = new Rectangle(bounds.Left + 14, bounds.Top + 12, 28, 34);
-            using (var iconBrush = new SolidBrush(Color.White))
-                g.FillRectangle(iconBrush, iconRect);
-            using (var foldBrush = new SolidBrush(Color.FromArgb(210, 210, 210)))
+            using (var iconFill = new SolidBrush(Color.FromArgb(46, 46, 46)))
+                g.FillRectangle(iconFill, iconRect);
+            using (var iconPen = new Pen(Color.FromArgb(200, 200, 200), 1.2F))
+                g.DrawRectangle(iconPen, iconRect);
+            using (var foldBrush = new SolidBrush(Color.FromArgb(170, 170, 170)))
                 g.FillPolygon(foldBrush, new[]
                 {
                     new Point(iconRect.Right - 9, iconRect.Top),
