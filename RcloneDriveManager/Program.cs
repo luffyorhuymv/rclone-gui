@@ -601,13 +601,13 @@ namespace RcloneDriveManager
 
         private TabPage BuildBrowserTab()
         {
-            var page = new TabPage("Duyệt file") { BackColor = _surface, Padding = new Padding(22) };
+            var page = new TabPage("Duyệt file") { BackColor = _surface, Padding = new Padding(12) };
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _surface };
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             page.Controls.Add(pageLayout);
 
-            var top = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 7, RowCount = 1, BackColor = _surface, Padding = new Padding(0, 10, 0, 10) };
+            var top = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 7, RowCount = 1, BackColor = _surface, Padding = new Padding(0, 4, 0, 4) };
             top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 62));
             top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
             top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 46));
@@ -617,8 +617,8 @@ namespace RcloneDriveManager
             top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 86));
             pageLayout.Controls.Add(top, 0, 0);
 
-            browseRemoteCombo = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(0, 8, 12, 8) };
-            browsePathBox = new TextBox { Dock = DockStyle.Fill, Text = "/", Margin = new Padding(0, 8, 12, 8) };
+            browseRemoteCombo = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList, Margin = new Padding(0, 4, 12, 4) };
+            browsePathBox = new TextBox { Dock = DockStyle.Fill, Text = "/", Margin = new Padding(0, 4, 12, 4) };
             top.Controls.Add(new Label { Text = "Remote", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
             top.Controls.Add(browseRemoteCombo, 1, 0);
             top.Controls.Add(new Label { Text = "Path", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 2, 0);
@@ -640,15 +640,18 @@ namespace RcloneDriveManager
 
         private TabPage BuildTransferTab()
         {
-            var page = new TabPage("Truyền dữ liệu") { BackColor = _surface, Padding = new Padding(22) };
+            var page = new TabPage("Truyền dữ liệu") { BackColor = _surface, Padding = new Padding(12) };
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _surface };
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 270));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 180));
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             page.Controls.Add(pageLayout);
 
-            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, BackColor = _surface };
+            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, BackColor = _surface };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
             pageLayout.Controls.Add(layout, 0, 0);
 
             transferModeCombo = AddCombo(layout, "Chế độ", 0, 0);
@@ -818,20 +821,20 @@ namespace RcloneDriveManager
 
         private TabPage BuildAddConfigTab()
         {
-            var page = new TabPage("Thêm config") { BackColor = _surface, Padding = new Padding(22) };
+            var page = new TabPage("Thêm config") { BackColor = _surface, Padding = new Padding(12) };
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, BackColor = _surface };
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 540));
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 66));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 352));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             page.Controls.Add(pageLayout);
 
             var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 2, BackColor = _surface };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             pageLayout.Controls.Add(layout, 0, 0);
 
@@ -1428,10 +1431,11 @@ namespace RcloneDriveManager
 
         private Control Wrap(string label, Control input)
         {
-            var p = new Panel { Dock = DockStyle.Fill, Height = input is TextBox && ((TextBox)input).Multiline ? 104 : 76, Padding = new Padding(0, 0, 14, 12), BackColor = _surface };
-            p.Controls.Add(new Label { Text = label, Dock = DockStyle.Top, Height = 24, Font = new Font("Segoe UI", 8.5F, FontStyle.Bold), ForeColor = _muted });
+            var isMultiline = input is TextBox && ((TextBox)input).Multiline;
+            var p = new Panel { Dock = DockStyle.Fill, Height = isMultiline ? 90 : 54, Padding = new Padding(4, 2, 14, 4), BackColor = _surface };
+            p.Controls.Add(new Label { Text = label, Dock = DockStyle.Top, Height = 18, Font = new Font("Segoe UI", 8.2F, FontStyle.Bold), ForeColor = _muted, TextAlign = ContentAlignment.BottomLeft });
             input.Dock = DockStyle.Top;
-            input.Top = 28;
+            input.Top = 18;
             input.BackColor = Color.White;
             input.ForeColor = _text;
             p.Controls.Add(input);
