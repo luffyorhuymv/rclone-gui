@@ -221,6 +221,8 @@ namespace RcloneDriveManager
         private readonly Color _success = Color.FromArgb(22, 163, 74);
 
         private ListView profileList;
+        private Button headerConnectButton;
+        private Button driveConnectButton;
         private TabControl mainTabs;
         private ComboBox remoteCombo;
         private ComboBox driveCombo;
@@ -329,7 +331,8 @@ namespace RcloneDriveManager
             headerActions.Controls.Add(ActionButton("Web UI", (s, e) => StartWebUi(), _surface, _text, 92));
             headerActions.Controls.Add(ActionButton("Làm mới", async (s, e) => await RefreshAllAsync(), _surface, _text, 104));
             headerActions.Controls.Add(ActionButton("Ngắt", (s, e) => UnmountSelected(), _surface, _danger, 86));
-            headerActions.Controls.Add(ActionButton("Kết nối", async (s, e) => await SaveAndMountCurrentProfileAsync(), _primary, Color.White, 112));
+            headerConnectButton = ActionButton("Kết nối", async (s, e) => await SaveAndMountCurrentProfileAsync(), _primary, Color.White, 122);
+            headerActions.Controls.Add(headerConnectButton);
             header.Controls.Add(headerActions, 1, 0);
 
             var left = new Panel { Dock = DockStyle.Fill, BackColor = _surface, Padding = new Padding(18, 18, 14, 18) };
@@ -347,12 +350,30 @@ namespace RcloneDriveManager
             driveListTitle.Controls.Add(new Label { Text = "Profile và ổ rclone đang mount", Font = new Font("Segoe UI", 8.5F), ForeColor = _muted, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopLeft }, 0, 1);
             leftLayout.Controls.Add(driveListTitle, 0, 0);
 
-            profileList = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, HideSelection = false, BorderStyle = BorderStyle.FixedSingle, BackColor = Color.FromArgb(248, 250, 252), ForeColor = _text, Font = new Font("Segoe UI", 9F) };
-            profileList.Columns.Add("Tên ổ", 142);
-            profileList.Columns.Add("Ổ", 52);
-            profileList.Columns.Add("Trạng thái", 82);
-            profileList.Columns.Add("Nguồn", 116);
-            profileList.SelectedIndexChanged += (s, e) => LoadSelectedProfileIntoFields();
+            profileList = new ListView
+            {
+                Dock = DockStyle.Fill,
+                View = View.Details,
+                FullRowSelect = true,
+                HideSelection = false,
+                BorderStyle = BorderStyle.None,
+                BackColor = Color.FromArgb(32, 32, 32),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9F),
+                OwnerDraw = true,
+                HeaderStyle = ColumnHeaderStyle.None,
+                ShowItemToolTips = true,
+                SmallImageList = new ImageList { ImageSize = new Size(1, 58) }
+            };
+            profileList.Columns.Add("Ổ", 316);
+            profileList.DrawColumnHeader += (s, e) => e.DrawDefault = false;
+            profileList.DrawItem += DrawDriveListItem;
+            profileList.DrawSubItem += DrawDriveListSubItem;
+            profileList.SelectedIndexChanged += (s, e) =>
+            {
+                LoadSelectedProfileIntoFields();
+                UpdateConnectButtonState();
+            };
             leftLayout.Controls.Add(profileList, 0, 1);
 
             var leftActions = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, Padding = new Padding(0, 6, 0, 0), BackColor = _surface };
@@ -425,7 +446,8 @@ namespace RcloneDriveManager
             actionBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
 
             var connectGroup = CompactButtonGroup("Kết nối");
-            connectGroup.Controls.Add(ActionButton("Kết nối", async (s, e) => await SaveAndMountCurrentProfileAsync(), _primary, Color.White, 104));
+            driveConnectButton = ActionButton("Kết nối", async (s, e) => await SaveAndMountCurrentProfileAsync(), _primary, Color.White, 112);
+            connectGroup.Controls.Add(driveConnectButton);
             connectGroup.Controls.Add(ActionButton("Ngắt", (s, e) => UnmountSelected(), _surface, _danger, 96));
             connectGroup.Controls.Add(ActionButton("Mở ổ", (s, e) => OpenSelectedDrive(), _surface, _text, 96));
             connectGroup.Controls.Add(ActionButton("Làm mới ổ", async (s, e) => await RefreshSelectedMountAsync(), _surface, _text, 112));
@@ -798,6 +820,132 @@ namespace RcloneDriveManager
             b.FlatAppearance.MouseDownBackColor = backColor == _surface ? Color.FromArgb(241, 245, 249) : Color.FromArgb(30, 58, 138);
             b.Click += click;
             return b;
+        }
+
+        private void DrawDriveListItem(object sender, DrawListViewItemEventArgs e)
+        {
+            DrawDriveRow(e.Graphics, e.Item, e.Bounds);
+        }
+
+        private void DrawDriveListSubItem(object sender, DrawListViewSubItemEventArgs e)
+        {
+            if (e.ColumnIndex == 0)
+                DrawDriveRow(e.Graphics, e.Item, e.Bounds);
+        }
+
+        private void DrawDriveRow(Graphics g, ListViewItem item, Rectangle itemBounds)
+        {
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            var bounds = itemBounds;
+            bounds.Inflate(-4, -3);
+
+            var selected = item.Selected;
+            var mounted = false;
+            var name = item.Text;
+            var drive = "";
+            var source = "";
+            var status = "Rảnh";
+
+            var profile = item.Tag as DriveProfile;
+            if (profile != null)
+            {
+                mounted = IsMountedProfile(profile);
+                name = profile.Name;
+                drive = DriveDisplay(profile);
+                source = profile.Remote + DriveProfile.NormalizeRemotePath(profile.RemotePath, profile.Remote);
+                status = mounted ? "Đang kết nối" : "Chưa kết nối";
+            }
+            else
+            {
+                var external = item.Tag as MountedDriveInfo;
+                if (external != null)
+                {
+                    mounted = true;
+                    name = external.Name;
+                    drive = external.DriveLetter;
+                    source = external.DisplayRoot;
+                    status = "Đang bật";
+                }
+            }
+
+            var cardColor = selected ? Color.FromArgb(55, 55, 55) : Color.FromArgb(38, 38, 38);
+            using (var bg = new SolidBrush(cardColor))
+                g.FillRectangle(bg, bounds);
+
+            var accent = mounted ? _success : Color.FromArgb(148, 163, 184);
+            using (var accentBrush = new SolidBrush(accent))
+                g.FillRectangle(accentBrush, bounds.Left, bounds.Top, 5, bounds.Height);
+
+            var iconRect = new Rectangle(bounds.Left + 14, bounds.Top + 12, 28, 34);
+            using (var iconBrush = new SolidBrush(Color.White))
+                g.FillRectangle(iconBrush, iconRect);
+            using (var foldBrush = new SolidBrush(Color.FromArgb(210, 210, 210)))
+                g.FillPolygon(foldBrush, new[]
+                {
+                    new Point(iconRect.Right - 9, iconRect.Top),
+                    new Point(iconRect.Right, iconRect.Top + 9),
+                    new Point(iconRect.Right - 9, iconRect.Top + 9)
+                });
+
+            var driveRect = new Rectangle(bounds.Left + 58, bounds.Top + 16, 26, 18);
+            using (var pen = new Pen(Color.FromArgb(160, 160, 160)))
+                g.DrawRectangle(pen, driveRect);
+            TextRenderer.DrawText(g, IsAutoDrive(drive) ? "A:" : drive, new Font("Segoe UI", 7.6F, FontStyle.Bold),
+                driveRect, Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+
+            TextRenderer.DrawText(g, name, new Font("Segoe UI", 9.3F, FontStyle.Bold),
+                new Rectangle(bounds.Left + 88, bounds.Top + 8, bounds.Width - 170, 20),
+                Color.White, TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+
+            TextRenderer.DrawText(g, source, new Font("Segoe UI", 7.5F),
+                new Rectangle(bounds.Left + 88, bounds.Top + 28, bounds.Width - 170, 18),
+                Color.FromArgb(150, 150, 150), TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+
+            var barRect = new Rectangle(bounds.Left + 88, bounds.Bottom - 15, bounds.Width - 178, 5);
+            using (var barBack = new SolidBrush(Color.FromArgb(82, 82, 82)))
+                g.FillRectangle(barBack, barRect);
+            using (var barFill = new SolidBrush(mounted ? Color.FromArgb(120, 120, 120) : Color.FromArgb(70, 70, 70)))
+                g.FillRectangle(barFill, barRect.Left, barRect.Top, Math.Max(16, barRect.Width / 3), barRect.Height);
+
+            TextRenderer.DrawText(g, status, new Font("Segoe UI", 7.8F),
+                new Rectangle(bounds.Left + 88, bounds.Bottom - 31, bounds.Width - 178, 16),
+                mounted ? Color.FromArgb(190, 255, 210) : Color.FromArgb(190, 190, 190),
+                TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+
+            var stateRect = new Rectangle(bounds.Right - 72, bounds.Top + 16, 44, 24);
+            using (var pill = new SolidBrush(mounted ? Color.FromArgb(22, 101, 52) : Color.FromArgb(75, 85, 99)))
+                g.FillEllipse(pill, new Rectangle(stateRect.Left, stateRect.Top, 24, 24));
+            TextRenderer.DrawText(g, mounted ? "✓" : "○", new Font("Segoe UI", 9F, FontStyle.Bold),
+                new Rectangle(stateRect.Left, stateRect.Top + 1, 24, 22), Color.White,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+
+            TextRenderer.DrawText(g, mounted ? "ON" : "OFF", new Font("Segoe UI", 7.6F, FontStyle.Bold),
+                new Rectangle(stateRect.Left + 26, stateRect.Top + 4, 28, 18),
+                mounted ? Color.FromArgb(190, 255, 210) : Color.FromArgb(180, 180, 180),
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+        }
+
+        private void UpdateConnectButtonState()
+        {
+            var profile = SelectedProfile;
+            var external = SelectedMountedDrive;
+            var mounted = profile != null ? IsMountedProfile(profile) : external != null;
+            var text = mounted ? "Đang kết nối" : "Kết nối";
+            var back = mounted ? _success : _primary;
+
+            UpdateConnectButton(headerConnectButton, text, back);
+            UpdateConnectButton(driveConnectButton, text, back);
+        }
+
+        private void UpdateConnectButton(Button button, string text, Color back)
+        {
+            if (button == null) return;
+            button.Text = text;
+            button.BackColor = back;
+            button.ForeColor = Color.White;
+            button.FlatAppearance.BorderColor = back;
+            button.FlatAppearance.MouseOverBackColor = back == _success ? Color.FromArgb(21, 128, 61) : Color.FromArgb(30, 64, 175);
+            button.FlatAppearance.MouseDownBackColor = back == _success ? Color.FromArgb(20, 83, 45) : Color.FromArgb(30, 58, 138);
         }
 
         private Button LogButton(string text, EventHandler click, Color foreColor, int width)
@@ -1409,30 +1557,25 @@ namespace RcloneDriveManager
         private void RenderProfiles()
         {
             ScanMountedDrives();
+            if (profileList.Columns.Count > 0)
+                profileList.Columns[0].Width = Math.Max(260, profileList.ClientSize.Width - 4);
             profileList.Items.Clear();
             foreach (var p in _profiles)
             {
                 var item = new ListViewItem(p.Name);
-                item.SubItems.Add(DriveDisplay(p));
                 var mounted = IsMountedProfile(p);
-                item.SubItems.Add(mounted ? "Kết nối" : "Rảnh");
-                item.SubItems.Add("Profile");
-                item.BackColor = mounted ? Color.FromArgb(236, 253, 245) : Color.FromArgb(248, 250, 252);
-                item.ForeColor = mounted ? Color.FromArgb(6, 95, 70) : _text;
+                item.ToolTipText = p.Name + " - " + DriveDisplay(p) + " - " + (mounted ? "Đang kết nối" : "Chưa kết nối");
                 item.Tag = p;
                 profileList.Items.Add(item);
             }
             foreach (var drive in _mountedExternalDrives)
             {
                 var item = new ListViewItem(drive.Name);
-                item.SubItems.Add(drive.DriveLetter);
-                item.SubItems.Add("Đang bật");
-                item.SubItems.Add(drive.Provider);
-                item.BackColor = Color.FromArgb(239, 246, 255);
-                item.ForeColor = Color.FromArgb(30, 64, 175);
+                item.ToolTipText = drive.Name + " - " + drive.DriveLetter + " - đang bật";
                 item.Tag = drive;
                 profileList.Items.Add(item);
             }
+            UpdateConnectButtonState();
         }
 
         private void SelectFirstProfile()
