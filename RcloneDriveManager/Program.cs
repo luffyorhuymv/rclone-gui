@@ -3091,7 +3091,66 @@ namespace RcloneDriveManager
                 SaveProfiles();
                 return remoteHost;
             }
-            return (p.TunnelHostname ?? "").Trim();
+            var saved = (p.TunnelHostname ?? "").Trim();
+            if (!string.IsNullOrWhiteSpace(saved)) return saved;
+
+            var legacy = ResolveTunnelHostnameFromLegacyProfile(p);
+            if (!string.IsNullOrWhiteSpace(legacy))
+            {
+                p.TunnelHostname = legacy;
+                SaveProfiles();
+                AddLog("Đã lấy lại Cloudflare hostname từ profile cũ: " + legacy);
+                return legacy;
+            }
+            return "";
+        }
+
+        private string ResolveTunnelHostnameFromLegacyProfile(DriveProfile p)
+        {
+            try
+            {
+                var candidates = new[]
+                {
+                    Path.Combine(@"D:\jetide\raidricloen\scrip", "profiles.json"),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RcloneDriveManager", "tunnel-profiles.json")
+                };
+                var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (!string.IsNullOrWhiteSpace(p.Name)) names.Add(p.Name.Trim());
+                if (!string.IsNullOrWhiteSpace(p.Remote)) names.Add(p.Remote.Trim().TrimEnd(':'));
+
+                foreach (var file in candidates)
+                {
+                    if (!File.Exists(file)) continue;
+                    var rows = _json.Deserialize<List<Dictionary<string, object>>>(File.ReadAllText(file, Encoding.UTF8));
+                    if (rows == null) continue;
+                    foreach (var row in rows)
+                    {
+                        var name = GetDictString(row, "name");
+                        if (string.IsNullOrWhiteSpace(name) || !names.Contains(name.Trim())) continue;
+                        var host = GetDictString(row, "hostname");
+                        if (!string.IsNullOrWhiteSpace(host) && !IsLocalTunnelHost(host))
+                            return host.Trim();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLog("Không đọc được profile tunnel cũ: " + ex.Message, "WARN");
+            }
+            return "";
+        }
+
+        private string GetDictString(Dictionary<string, object> row, string key)
+        {
+            object value;
+            return row != null && row.TryGetValue(key, out value) ? Convert.ToString(value) : "";
+        }
+
+        private bool IsLocalTunnelHost(string host)
+        {
+            return string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(host, "127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(host, "::1", StringComparison.OrdinalIgnoreCase);
         }
 
         private int ResolveTunnelLocalPort(DriveProfile p)
