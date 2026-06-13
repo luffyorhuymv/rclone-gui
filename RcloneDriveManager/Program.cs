@@ -63,6 +63,9 @@ namespace RcloneDriveManager
         public int BufferSizeMb { get; set; }
         public string MountPreset { get; set; }
         public string ExtraArgs { get; set; }
+        public bool TunnelEnabled { get; set; }
+        public string TunnelHostname { get; set; }
+        public int TunnelLocalPort { get; set; }
         public string TunnelCommand { get; set; }
 
         public DriveProfile()
@@ -84,6 +87,9 @@ namespace RcloneDriveManager
             BufferSizeMb = 32;
             MountPreset = "Nhanh/RaiDrive";
             ExtraArgs = "";
+            TunnelEnabled = false;
+            TunnelHostname = "";
+            TunnelLocalPort = 2221;
             TunnelCommand = "";
         }
 
@@ -229,6 +235,10 @@ namespace RcloneDriveManager
         private CheckBox readOnlyBox;
         private CheckBox autoMountBox;
         private CheckBox networkModeBox;
+        private CheckBox tunnelEnabledBox;
+        private TextBox tunnelHostnameBox;
+        private NumericUpDown tunnelPortBox;
+        private TextBox tunnelCommandBox;
         private RichTextBox logBox;
         private ComboBox browseRemoteCombo;
         private TextBox browsePathBox;
@@ -405,7 +415,7 @@ namespace RcloneDriveManager
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, RowCount = 3, ColumnCount = 1, BackColor = _surface };
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 520));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 700));
             page.Controls.Add(pageLayout);
 
             var actionBar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, BackColor = _surface, Padding = new Padding(0, 4, 0, 8) };
@@ -443,9 +453,11 @@ namespace RcloneDriveManager
             checks.Controls.Add(readOnlyBox);
             checks.Controls.Add(autoMountBox);
             checks.Controls.Add(networkModeBox);
+            tunnelEnabledBox = new CheckBox { Text = "Cloudflare tunnel", Width = 170 };
+            checks.Controls.Add(tunnelEnabledBox);
             pageLayout.Controls.Add(checks, 0, 1);
 
-            var panel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 7, CellBorderStyle = TableLayoutPanelCellBorderStyle.None, BackColor = _surface };
+            var panel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 9, CellBorderStyle = TableLayoutPanelCellBorderStyle.None, BackColor = _surface };
             panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
@@ -454,6 +466,8 @@ namespace RcloneDriveManager
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
             panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             pageLayout.Controls.Add(panel, 0, 2);
 
@@ -478,8 +492,12 @@ namespace RcloneDriveManager
             mountPresetCombo.SelectedItem = "Nhanh/RaiDrive";
             cacheMaxAgeBox = AddText(panel, "Giữ cache tối đa", "72h", 1, 4);
             writeBackBox = AddText(panel, "Upload sau khi sửa", "5s", 0, 5);
+            tunnelHostnameBox = AddText(panel, "CF Access hostname", "", 1, 5);
+            tunnelPortBox = AddNumber(panel, "Tunnel local port", 2221, 1, 65535, 0, 6);
+            tunnelCommandBox = new TextBox { Text = "", Height = 54, Multiline = true, ScrollBars = ScrollBars.Vertical };
+            panel.Controls.Add(Wrap("Lệnh tunnel tùy chỉnh", tunnelCommandBox), 1, 6);
             extraArgsBox = new TextBox { Text = "", Height = 54, Multiline = true, ScrollBars = ScrollBars.Vertical };
-            panel.Controls.Add(Wrap("Tham số rclone thêm", extraArgsBox), 0, 6);
+            panel.Controls.Add(Wrap("Tham số rclone thêm", extraArgsBox), 0, 7);
             panel.SetColumnSpan(extraArgsBox.Parent, 2);
 
             return page;
@@ -1693,6 +1711,10 @@ namespace RcloneDriveManager
                 networkModeBox.Checked = p.NetworkMode;
                 transfersBox.Value = Math.Max(transfersBox.Minimum, Math.Min(transfersBox.Maximum, p.Transfers <= 0 ? 4 : p.Transfers));
                 bufferBox.Value = Math.Max(bufferBox.Minimum, Math.Min(bufferBox.Maximum, p.BufferSizeMb <= 0 ? 32 : p.BufferSizeMb));
+                tunnelEnabledBox.Checked = p.TunnelEnabled || !string.IsNullOrWhiteSpace(p.TunnelCommand);
+                tunnelHostnameBox.Text = p.TunnelHostname ?? "";
+                tunnelPortBox.Value = Math.Max(tunnelPortBox.Minimum, Math.Min(tunnelPortBox.Maximum, p.TunnelLocalPort <= 0 ? 2221 : p.TunnelLocalPort));
+                tunnelCommandBox.Text = p.TunnelCommand ?? "";
                 extraArgsBox.Text = p.ExtraArgs ?? "";
                 _profileNameEditedByUser = !ShouldAutoReplaceProfileName(p.Name);
             }
@@ -1751,6 +1773,10 @@ namespace RcloneDriveManager
             p.Transfers = (int)transfersBox.Value;
             p.BufferSizeMb = (int)bufferBox.Value;
             p.MountPreset = Convert.ToString(mountPresetCombo.SelectedItem ?? mountPresetCombo.Text ?? "Nhanh/RaiDrive");
+            p.TunnelEnabled = tunnelEnabledBox.Checked;
+            p.TunnelHostname = tunnelHostnameBox.Text.Trim();
+            p.TunnelLocalPort = (int)tunnelPortBox.Value;
+            p.TunnelCommand = tunnelCommandBox.Text.Trim();
             p.ExtraArgs = extraArgsBox.Text.Trim();
             SaveProfiles();
             RenderProfiles();
@@ -1798,6 +1824,10 @@ namespace RcloneDriveManager
                 Transfers = (int)transfersBox.Value,
                 BufferSizeMb = (int)bufferBox.Value,
                 MountPreset = Convert.ToString(mountPresetCombo.SelectedItem ?? mountPresetCombo.Text ?? "Nhanh/RaiDrive"),
+                TunnelEnabled = tunnelEnabledBox.Checked,
+                TunnelHostname = tunnelHostnameBox.Text.Trim(),
+                TunnelLocalPort = (int)tunnelPortBox.Value,
+                TunnelCommand = tunnelCommandBox.Text.Trim(),
                 ExtraArgs = extraArgsBox.Text.Trim()
             };
             _profiles.Add(p);
@@ -2852,6 +2882,10 @@ namespace RcloneDriveManager
                 Transfers = (int)transfersBox.Value,
                 BufferSizeMb = (int)bufferBox.Value,
                 MountPreset = Convert.ToString(mountPresetCombo.SelectedItem ?? mountPresetCombo.Text ?? "Nhanh/RaiDrive"),
+                TunnelEnabled = tunnelEnabledBox.Checked,
+                TunnelHostname = tunnelHostnameBox.Text.Trim(),
+                TunnelLocalPort = (int)tunnelPortBox.Value,
+                TunnelCommand = tunnelCommandBox.Text.Trim(),
                 ExtraArgs = extraArgsBox.Text.Trim()
             };
             _profiles.Add(p);
@@ -2872,8 +2906,11 @@ namespace RcloneDriveManager
 
         private async Task<bool> EnsureProfileTunnelAsync(DriveProfile p)
         {
-            var command = p == null ? "" : (p.TunnelCommand ?? "").Trim();
+            var command = BuildTunnelCommand(p);
             if (string.IsNullOrWhiteSpace(command)) return true;
+
+            if (!await EnsureRcloneRemoteUsesTunnelAsync(p))
+                return false;
 
             string host;
             int port;
@@ -2945,6 +2982,55 @@ namespace RcloneDriveManager
 
             AddLog("Tunnel chua mo port " + host + ":" + port + ". Kiem tra cloudflared/login Cloudflare Access.", "ERROR");
             return false;
+        }
+
+        private string BuildTunnelCommand(DriveProfile p)
+        {
+            if (p == null) return "";
+            var custom = (p.TunnelCommand ?? "").Trim();
+            if (!string.IsNullOrWhiteSpace(custom)) return custom;
+            if (!p.TunnelEnabled) return "";
+            var hostname = (p.TunnelHostname ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(hostname)) return "";
+            var port = p.TunnelLocalPort <= 0 ? 2221 : p.TunnelLocalPort;
+            var exe = FindCloudflaredExe();
+            return QuoteIfNeeded(exe) + " access tcp --hostname " + QuoteIfNeeded(hostname) + " --url localhost:" + port;
+        }
+
+        private async Task<bool> EnsureRcloneRemoteUsesTunnelAsync(DriveProfile p)
+        {
+            try
+            {
+                if (p == null || string.IsNullOrWhiteSpace(p.Remote)) return true;
+                var command = BuildTunnelCommand(p);
+                string host;
+                int port;
+                if (!TryExtractTunnelEndpoint(command, out host, out port)) return true;
+                var remoteName = p.Remote.Trim().TrimEnd(':');
+                if (string.IsNullOrWhiteSpace(remoteName)) return true;
+                AddLog("Cau hinh rclone remote " + remoteName + " dung tunnel " + host + ":" + port);
+                var result = await RunRcloneResultAsync(20000, "rclone config update " + remoteName + " host " + host + " port " + port, "config", "update", remoteName, "host", host, "port", Convert.ToString(port));
+                if (result.ExitCode == 0) return true;
+                AddLog("Khong cap nhat duoc rclone remote sang tunnel. Exit code: " + result.ExitCode, "ERROR");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                AddLog("Khong cap nhat duoc remote tunnel: " + ex.Message, "ERROR");
+                return false;
+            }
+        }
+
+        private string FindCloudflaredExe()
+        {
+            var candidates = new[]
+            {
+                Path.Combine(_appDir, "cloudflared.exe"),
+                @"C:\Cloudflared\cloudflared.exe",
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Cloudflared", "cloudflared.exe"),
+                "cloudflared.exe"
+            };
+            return candidates.FirstOrDefault(File.Exists) ?? "cloudflared.exe";
         }
 
         private int SafeExitCode(Process proc)

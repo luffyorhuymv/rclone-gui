@@ -40,6 +40,23 @@ chmod +x ./linux/rclone-drive-linux.sh
 
 Linux không dùng ký tự ổ như `X:`/`Y:`. Script mount vào thư mục, tự kiểm tra/cài `git`, FUSE, `rclone`, và tự `git init` project nếu OpenCode cần.
 
+## Cloudflare Access TCP tunnel
+
+Với SFTP/SSH nằm sau Cloudflare Access, bật `Cloudflare tunnel` trong profile rồi nhập:
+
+```text
+CF Access hostname: lapp.apphay.io.vn
+Tunnel local port: 2221
+```
+
+App sẽ tự chạy:
+
+```text
+cloudflared access tcp --hostname lapp.apphay.io.vn --url localhost:2221
+```
+
+Sau đó app tự chỉnh remote rclone dùng `host=localhost` và `port=2221` trước khi test/mount.
+
 ## Source
 
 Source chính nằm tại:
