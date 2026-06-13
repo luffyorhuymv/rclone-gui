@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.4";
+        private const string AppVersion = "1.0.5";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -716,6 +716,8 @@ namespace RcloneDriveManager
 
             var configActions = ToolGroup("Config");
             configActions.Controls.Add(ActionButton("Thêm config", (s, e) => SelectTab("Thêm config"), _surface, _text, 124));
+            configActions.Controls.Add(ActionButton("Xem config", (s, e) => ShowConfigFromUi(), _surface, _text, 118));
+            configActions.Controls.Add(ActionButton("Xóa config", async (s, e) => await DeleteConfigFromUiAsync(), _surface, _danger, 118));
             configActions.Controls.Add(ActionButton("Mở wizard", (s, e) => OpenConfig(), _surface, _text, 112));
             configActions.Controls.Add(ActionButton("Đồng bộ config lên", async (s, e) => await SyncConfigUpAsync(), _primary, Color.White, 168));
             configActions.Controls.Add(ActionButton("UI web", (s, e) => StartWebUi(), _surface, _text, 92));
@@ -856,6 +858,8 @@ namespace RcloneDriveManager
             var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(0, 12, 0, 0), BackColor = _surface };
             actions.Controls.Add(ActionButton("Kiểm tra kết nối", async (s, e) => await CheckConfigConnectionAsync(true), _surface, _text, 162));
             actions.Controls.Add(ActionButton("Thêm config", async (s, e) => await AddConfigFromUiAsync(), _primary, Color.White, 132));
+            actions.Controls.Add(ActionButton("Xem config", (s, e) => ShowConfigFromUi(), _surface, _text, 118));
+            actions.Controls.Add(ActionButton("Xóa config", async (s, e) => await DeleteConfigFromUiAsync(), _surface, _danger, 118));
             actions.Controls.Add(ActionButton("Mở wizard", (s, e) => OpenConfig(), _surface, _text, 112));
             configCheckLabel = new Label { Text = "Chưa kiểm tra", AutoSize = false, Width = 360, Height = 36, TextAlign = ContentAlignment.MiddleLeft };
             actions.Controls.Add(configCheckLabel);
@@ -2381,10 +2385,13 @@ namespace RcloneDriveManager
                 MessageBox.Show("Hãy ngắt kết nối profile trước.", "Trình quản lý ổ Rclone", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
+            if (MessageBox.Show("Xóa profile \"" + p.Name + "\" khỏi app? Rclone config " + p.Remote + " vẫn được giữ lại.", "Xóa profile", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                return;
             _profiles.Remove(p);
             SaveProfiles();
             RenderProfiles();
             SelectFirstProfile();
+            AddLog("Đã xóa profile khỏi app: " + p.Name + " (không xóa rclone config).");
         }
 
         private void BrowseCacheDirForSelectedProfile()
@@ -4723,6 +4730,153 @@ namespace RcloneDriveManager
             return "";
         }
 
+        private string GetConfigNameFromUiOrSelection()
+        {
+            var name = (configNameBox != null ? configNameBox.Text : "").Trim();
+            if (!string.IsNullOrWhiteSpace(name))
+                return name.TrimEnd(':');
+            var profile = SelectedProfile;
+            if (profile != null && !string.IsNullOrWhiteSpace(profile.Remote))
+                return profile.Remote.Trim().TrimEnd(':');
+            var selectedRemote = Convert.ToString(remoteCombo != null ? (remoteCombo.SelectedItem ?? remoteCombo.Text) : "");
+            if (!string.IsNullOrWhiteSpace(selectedRemote))
+                return selectedRemote.Trim().TrimEnd(':');
+            return "";
+        }
+
+        private string ReadRemoteConfigSection(string remoteName)
+        {
+            remoteName = (remoteName ?? "").Trim().TrimEnd(':');
+            if (string.IsNullOrWhiteSpace(remoteName)) return "";
+            var configPath = GetRcloneConfigPathSync();
+            if (string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath)) return "";
+
+            var lines = new List<string>();
+            var inSection = false;
+            foreach (var rawLine in File.ReadLines(configPath))
+            {
+                var line = rawLine.Trim();
+                if (line.StartsWith("[") && line.EndsWith("]"))
+                {
+                    if (inSection) break;
+                    inSection = string.Equals(line.Substring(1, line.Length - 2).Trim(), remoteName, StringComparison.OrdinalIgnoreCase);
+                    if (inSection) lines.Add(rawLine);
+                    continue;
+                }
+                if (inSection) lines.Add(MaskConfigLine(rawLine));
+            }
+            return string.Join(Environment.NewLine, lines);
+        }
+
+        private string MaskConfigLine(string rawLine)
+        {
+            var idx = rawLine.IndexOf('=');
+            if (idx < 0) return rawLine;
+            var key = rawLine.Substring(0, idx).Trim();
+            if (IsSensitiveConfigKey(key))
+                return rawLine.Substring(0, idx + 1) + " <ẩn>";
+            return rawLine;
+        }
+
+        private bool IsSensitiveConfigKey(string key)
+        {
+            key = (key ?? "").ToLowerInvariant();
+            return key.Contains("pass") ||
+                   key.Contains("token") ||
+                   key.Contains("secret") ||
+                   key.Contains("key") ||
+                   key.Contains("client_id");
+        }
+
+        private void ShowConfigFromUi()
+        {
+            var name = GetConfigNameFromUiOrSelection();
+            if (!IsValidRemoteName(name))
+            {
+                MessageBox.Show("Hãy nhập tên remote hoặc chọn một profile trước.", "Trình quản lý ổ Rclone", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            var section = ReadRemoteConfigSection(name);
+            if (string.IsNullOrWhiteSpace(section))
+            {
+                MessageBox.Show("Không tìm thấy config: " + name + ":", "Trình quản lý ổ Rclone", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            ShowTextDialog("Config " + name + ":", section);
+            AddLog("Đã mở xem config: " + name + ":");
+        }
+
+        private void ShowTextDialog(string title, string text)
+        {
+            using (var form = new Form())
+            using (var box = new TextBox())
+            using (var close = new Button())
+            {
+                form.Text = title;
+                form.Width = 760;
+                form.Height = 520;
+                form.StartPosition = FormStartPosition.CenterParent;
+                form.MinimizeBox = false;
+                form.MaximizeBox = true;
+                box.Multiline = true;
+                box.ReadOnly = true;
+                box.ScrollBars = ScrollBars.Both;
+                box.WordWrap = false;
+                box.Dock = DockStyle.Fill;
+                box.Font = new Font("Consolas", 9.5F);
+                box.Text = text;
+                close.Text = "Đóng";
+                close.Dock = DockStyle.Bottom;
+                close.Height = 38;
+                close.DialogResult = DialogResult.OK;
+                form.Controls.Add(box);
+                form.Controls.Add(close);
+                form.AcceptButton = close;
+                form.ShowDialog(this);
+            }
+        }
+
+        private async Task DeleteConfigFromUiAsync()
+        {
+            var name = GetConfigNameFromUiOrSelection();
+            if (!IsValidRemoteName(name))
+            {
+                MessageBox.Show("Hãy nhập tên remote hoặc chọn một profile trước.", "Trình quản lý ổ Rclone", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            var relatedProfiles = _profiles.Where(p => string.Equals((p.Remote ?? "").Trim().TrimEnd(':'), name, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (relatedProfiles.Any(IsMountedProfile))
+            {
+                MessageBox.Show("Remote này đang có ổ mount. Hãy ngắt kết nối trước khi xóa config.", "Trình quản lý ổ Rclone", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            var message = "Xóa rclone config " + name + ": ?";
+            if (relatedProfiles.Count > 0)
+                message += Environment.NewLine + "Đồng thời xóa " + relatedProfiles.Count + " profile đang dùng remote này.";
+            if (MessageBox.Show(message, "Xóa config", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                return;
+
+            var output = await RunCaptureAsync("config", "delete", name);
+            await RefreshRemotesAsync();
+            if (_remotes.Any(r => string.Equals(r.TrimEnd(':'), name, StringComparison.OrdinalIgnoreCase)))
+            {
+                configCheckLabel.Text = "Delete failed";
+                AddLog("Xóa config thất bại: " + name + ": " + output, "ERROR");
+                return;
+            }
+
+            foreach (var p in relatedProfiles)
+                _profiles.Remove(p);
+            SaveProfiles();
+            RenderProfiles();
+            SelectFirstProfile();
+            if (configNameBox != null && string.Equals((configNameBox.Text ?? "").Trim().TrimEnd(':'), name, StringComparison.OrdinalIgnoreCase))
+                configNameBox.Clear();
+            if (configCheckLabel != null)
+                configCheckLabel.Text = "Deleted";
+            AddLog("Đã xóa config và profile liên quan: " + name + ":");
+        }
+
         private async Task<bool> CheckConfigConnectionAsync(bool showMessage)
         {
             var name = (configNameBox.Text ?? "").Trim();
@@ -4823,10 +4977,19 @@ namespace RcloneDriveManager
 
             var profile = new DriveProfile
             {
-                Name = "Drive " + name,
+                Name = UniqueProfileName(name),
                 Remote = name + ":",
                 RemotePath = testPath,
-                DriveLetter = GetFreeDriveLetters().FirstOrDefault() ?? "Z:"
+                DriveLetter = GetFreeDriveLetters().FirstOrDefault() ?? "Z:",
+                CacheMode = "full",
+                CacheDir = "%USERPROFILE%\\.cache\\rclone",
+                LocalWorkDir = GetDefaultLocalWorkDir(name),
+                VfsCacheMaxAge = "72h",
+                VfsWriteBack = "5s",
+                NetworkMode = true,
+                Transfers = 4,
+                BufferSizeMb = 32,
+                MountPreset = "Nhanh/RaiDrive"
             };
             _profiles.Add(profile);
             SaveProfiles();
