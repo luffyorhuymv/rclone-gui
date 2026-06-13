@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.14";
+        private const string AppVersion = "1.0.15";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -945,56 +945,38 @@ namespace RcloneDriveManager
             if (tabs == null) return;
             var selected = e.Index == tabs.SelectedIndex;
             var bounds = e.Bounds;
+            var g = e.Graphics;
 
-            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 
             var parentBgColor = tabs.Parent?.BackColor ?? Color.FromArgb(248, 250, 252);
             using (var clearBrush = new SolidBrush(parentBgColor))
-                e.Graphics.FillRectangle(clearBrush, bounds);
+                g.FillRectangle(clearBrush, bounds);
 
-            bounds.Inflate(-1, -1);
-            if (bounds.Width <= 12 || bounds.Height <= 12) return;
+            using (var borderPen = new Pen(_line, 1F))
+            {
+                g.DrawLine(borderPen, bounds.Left, bounds.Bottom - 1, bounds.Right, bounds.Bottom - 1);
+            }
 
             if (selected)
-                bounds.Height += 2;
-
-            using (var path = GetTabPath(bounds, 5, selected))
             {
-                Color bgClr = selected ? _surface : (isMain ? Color.FromArgb(241, 245, 249) : Color.FromArgb(243, 244, 246));
-                using (var bg = new SolidBrush(bgClr))
-                    e.Graphics.FillPath(bg, path);
-
-                var borderPenColor = selected ? _primary : _line;
-                using (var border = new Pen(borderPenColor, 1.2F))
-                    e.Graphics.DrawPath(border, path);
+                using (var accentBrush = new SolidBrush(_primary))
+                {
+                    g.FillRectangle(accentBrush, bounds.Left + 8, bounds.Bottom - 3, bounds.Width - 16, 3);
+                }
             }
 
-            var foreClr = selected ? _primary : _muted;
-            TextRenderer.DrawText(
-                e.Graphics,
-                tabs.TabPages[e.Index].Text,
-                tabs.Font,
-                bounds,
-                foreClr,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-        }
-
-        private System.Drawing.Drawing2D.GraphicsPath GetTabPath(Rectangle rect, float radius, bool selected)
-        {
-            var path = new System.Drawing.Drawing2D.GraphicsPath();
-            float r2 = radius * 2f;
-            path.StartFigure();
-            path.AddLine(rect.X, rect.Bottom, rect.X, rect.Y + radius);
-            path.AddArc(rect.X, rect.Y, r2, r2, 180, 90);
-            path.AddLine(rect.X + radius, rect.Y, rect.Right - radius, rect.Y);
-            path.AddArc(rect.Right - r2, rect.Y, r2, r2, 270, 90);
-            path.AddLine(rect.Right, rect.Y + radius, rect.Right, rect.Bottom);
-            if (!selected)
+            using (var font = new Font(tabs.Font.FontFamily, tabs.Font.Size, selected ? FontStyle.Bold : FontStyle.Regular))
             {
-                path.AddLine(rect.Right, rect.Bottom, rect.X, rect.Bottom);
-                path.CloseFigure();
+                var foreClr = selected ? _primary : _muted;
+                TextRenderer.DrawText(
+                    g,
+                    tabs.TabPages[e.Index].Text,
+                    font,
+                    bounds,
+                    foreClr,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
             }
-            return path;
         }
 
         private void DrawDriveListItem(object sender, DrawListViewItemEventArgs e)
