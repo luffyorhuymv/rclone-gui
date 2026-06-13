@@ -58,6 +58,7 @@ namespace RcloneDriveManager
         public string VfsWriteBack { get; set; }
         public bool ReadOnly { get; set; }
         public bool AutoMount { get; set; }
+        public bool RestoreOnStartup { get; set; }
         public bool NetworkMode { get; set; }
         public int Transfers { get; set; }
         public int BufferSizeMb { get; set; }
@@ -82,6 +83,7 @@ namespace RcloneDriveManager
             VfsWriteBack = "5s";
             ReadOnly = false;
             AutoMount = false;
+            RestoreOnStartup = false;
             NetworkMode = true;
             Transfers = 4;
             BufferSizeMb = 32;
@@ -2862,20 +2864,38 @@ namespace RcloneDriveManager
             _activeDrives.Remove(profile);
         }
 
+        private void MarkProfileManuallyDisconnected(DriveProfile profile)
+        {
+            if (profile == null) return;
+            profile.RestoreOnStartup = false;
+            SaveProfiles();
+        }
+
         private async Task MountSelectedAsync()
         {
             var p = SelectedProfile;
             if (p == null)
-                p = CreateProfileFromCurrentFields();
-            else if (IsMountedProfile(p))
             {
-                var baseName = string.IsNullOrWhiteSpace(nameBox.Text) ? p.Name : nameBox.Text.Trim();
-                p = CreateProfileFromCurrentFields(UniqueProfileName(baseName), true);
-                if (p != null)
-                    AddLog("Profile đang kết nối, tự tạo ổ mới để mount thêm.");
+                var external = SelectedMountedDrive;
+                if (external != null)
+                {
+                    AddLog("Ổ " + external.DriveLetter + " đang kết nối sẵn. Hãy chọn profile cấu hình hoặc bấm Mới để tạo profile khác.", "WARN");
+                    OpenDriveInExplorer(external.DriveLetter);
+                    return;
+                }
+                p = CreateProfileFromCurrentFields();
             }
             else
+            {
+                if (IsMountedProfile(p))
+                {
+                    var drive = ActiveDriveForProfile(p);
+                    AddLog("Profile '" + p.Name + "' đã kết nối tại " + drive + ".", "WARN");
+                    if (!IsAutoDrive(drive)) OpenDriveInExplorer(drive);
+                    return;
+                }
                 SaveCurrentProfile();
+            }
             if (p == null) return;
             await MountProfileAsync(p);
         }
@@ -3259,6 +3279,8 @@ namespace RcloneDriveManager
             RenderProfiles();
             if (await WaitForDriveReadyAsync(mountDrive, 8000))
             {
+                p.RestoreOnStartup = true;
+                SaveProfiles();
                 AddLog("Mounted " + p.Name + " at " + mountDrive + " PID " + proc.Id);
                 SetDriveIcon(mountDrive, true);
                 RefreshExplorer();
@@ -3520,6 +3542,7 @@ namespace RcloneDriveManager
             }
             Process proc;
             var drive = ActiveDriveForProfile(p);
+            MarkProfileManuallyDisconnected(p);
             if (_mounts.TryGetValue(drive, out proc))
             {
                 try
@@ -3633,7 +3656,16 @@ namespace RcloneDriveManager
 
         private async Task MountAutoProfilesAsync()
         {
-            foreach (var p in _profiles.Where(x => x.AutoMount))
+            var pending = _profiles
+                .Where(x => !string.IsNullOrWhiteSpace(x.Remote) && (x.AutoMount || x.RestoreOnStartup))
+                .ToList();
+            if (pending.Count == 0)
+            {
+                AddLog("Không có profile cần tự mount khi khởi động.");
+                return;
+            }
+            AddLog("Tự mount " + pending.Count + " profile khi khởi động...");
+            foreach (var p in pending)
                 await MountProfileAsync(p);
         }
 
