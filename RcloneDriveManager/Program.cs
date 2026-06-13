@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.15";
+        private const string AppVersion = "1.0.17";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -211,8 +211,8 @@ namespace RcloneDriveManager
         private readonly List<MountedDriveInfo> _mountedExternalDrives = new List<MountedDriveInfo>();
         private readonly Dictionary<string, MountedDriveInfo> _detectedRcloneDrives = new Dictionary<string, MountedDriveInfo>(StringComparer.OrdinalIgnoreCase);
         private Process _webUiProcess;
-        private readonly Color _bg = Color.FromArgb(248, 250, 252);
-        private readonly Color _surface = Color.FromArgb(245, 245, 247);
+        private readonly Color _bg = Color.FromArgb(240, 240, 243);
+        private readonly Color _surface = Color.FromArgb(243, 243, 246);
         private readonly Color _line = Color.FromArgb(229, 231, 235);
         private readonly Color _text = Color.FromArgb(25, 28, 29);
         private readonly Color _muted = Color.FromArgb(66, 71, 84);
@@ -612,7 +612,7 @@ namespace RcloneDriveManager
             top.Controls.Add(ActionButton("Tạo thư mục", async (s, e) => await BrowseMkdirAsync(), _surface, _text, 116), 5, 0);
             top.Controls.Add(ActionButton("Xóa", async (s, e) => await BrowseDeleteAsync(), _surface, _danger, 78), 6, 0);
 
-            browserList = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, Font = new Font("Consolas", 9.5F), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.FromArgb(248, 250, 252) };
+            browserList = new ListView { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, Font = new Font("Consolas", 9.5F), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.White };
             browserList.Columns.Add("Loại", 82);
             browserList.Columns.Add("Tên", 260);
             browserList.Columns.Add("Kích thước", 110);
@@ -660,14 +660,14 @@ namespace RcloneDriveManager
             var page = new TabPage("Công cụ") { BackColor = _surface, Padding = new Padding(22) };
             page.AutoScroll = true;
             var layout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, RowCount = 5, ColumnCount = 1, BackColor = _surface };
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 154));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             page.Controls.Add(layout);
 
-            layout.Controls.Add(new Label { Text = "Công cụ", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 13F, FontStyle.Bold), ForeColor = _text, TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
+            layout.Controls.Add(new Label { Text = "Công cụ", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 13F, FontStyle.Bold), ForeColor = _text, TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0, 0, 0, 12) }, 0, 0);
 
             var remoteActions = ToolGroup("Remote");
             remoteActions.Controls.Add(ActionButton("Thông tin", async (s, e) => await RunSimpleForSelectedAsync("about"), _surface, _text, 104));
@@ -758,7 +758,9 @@ namespace RcloneDriveManager
         {
             var panel = new FlowLayoutPanel
             {
-                Dock = DockStyle.Fill,
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 BackColor = _surface,
                 FlowDirection = FlowDirection.LeftToRight,
                 WrapContents = true,
@@ -882,7 +884,7 @@ namespace RcloneDriveManager
                 ScrollBars = ScrollBars.Vertical,
                 WordWrap = true,
                 BorderStyle = BorderStyle.FixedSingle,
-                BackColor = Color.FromArgb(248, 250, 252),
+                BackColor = Color.White,
                 Font = new Font("Segoe UI", 9F),
                 Text = "Ví dụ:\r\n" +
                        "SFTP: host=1.2.3.4, user=root, pass=<mật khẩu đã rclone obscure>\r\n" +
@@ -914,22 +916,97 @@ namespace RcloneDriveManager
 
         private Button ActionButton(string text, EventHandler click, Color backColor, Color foreColor, int width)
         {
+            var actualBg = backColor == _surface ? Color.White : backColor;
+            
+            Color hoverBg, hoverBorder, hoverFore;
+            Color pressedBg, pressedBorder, pressedFore;
+            Color border;
+            
+            if (actualBg == Color.White)
+            {
+                border = Color.FromArgb(226, 232, 240); // Slate 200
+                
+                if (foreColor == _danger)
+                {
+                    hoverBg = Color.FromArgb(254, 242, 242); // Red 50
+                    hoverBorder = Color.FromArgb(252, 165, 165); // Red 300
+                    hoverFore = Color.FromArgb(220, 38, 38); // Red 600
+                    
+                    pressedBg = Color.FromArgb(254, 226, 226); // Red 100
+                    pressedBorder = Color.FromArgb(239, 68, 68); // Red 500
+                    pressedFore = Color.FromArgb(185, 28, 28); // Red 700
+                }
+                else
+                {
+                    hoverBg = Color.FromArgb(243, 248, 255); // Light Blue 50
+                    hoverBorder = Color.FromArgb(191, 219, 254); // Blue 200
+                    hoverFore = _primary; // Primary blue text on hover
+                    
+                    pressedBg = Color.FromArgb(219, 234, 254); // Blue 100
+                    pressedBorder = Color.FromArgb(96, 165, 250); // Blue 400
+                    pressedFore = Color.FromArgb(30, 58, 138); // Dark blue text
+                }
+            }
+            else if (actualBg == _primary)
+            {
+                border = _primary;
+                hoverBg = Color.FromArgb(29, 78, 216); // Darker blue
+                hoverBorder = Color.FromArgb(29, 78, 216);
+                hoverFore = Color.White;
+                
+                pressedBg = Color.FromArgb(30, 58, 138);
+                pressedBorder = Color.FromArgb(30, 58, 138);
+                pressedFore = Color.White;
+            }
+            else if (actualBg == _danger)
+            {
+                border = _danger;
+                hoverBg = Color.FromArgb(220, 38, 38);
+                hoverBorder = Color.FromArgb(220, 38, 38);
+                hoverFore = Color.White;
+                
+                pressedBg = Color.FromArgb(185, 28, 28);
+                pressedBorder = Color.FromArgb(185, 28, 28);
+                pressedFore = Color.White;
+            }
+            else
+            {
+                border = actualBg;
+                hoverBg = Color.FromArgb(
+                    Math.Max(0, actualBg.R - 20),
+                    Math.Max(0, actualBg.G - 20),
+                    Math.Max(0, actualBg.B - 20)
+                );
+                hoverBorder = hoverBg;
+                hoverFore = foreColor;
+                
+                pressedBg = Color.FromArgb(
+                    Math.Max(0, actualBg.R - 40),
+                    Math.Max(0, actualBg.G - 40),
+                    Math.Max(0, actualBg.B - 40)
+                );
+                pressedBorder = pressedBg;
+                pressedFore = foreColor;
+            }
+
             var b = new RoundedButton
             {
                 Text = text,
                 Width = width,
-                Height = 30,
-                Margin = new Padding(2, 3, 2, 3),
-                BackColor = backColor,
+                Height = 32,
+                Margin = new Padding(3, 4, 3, 4),
+                BackColor = actualBg,
                 ForeColor = foreColor,
-                Font = new Font("Segoe UI", 8F, FontStyle.Bold),
-                BorderRadius = 6,
+                Font = new Font("Segoe UI", 9F, FontStyle.Bold),
+                BorderRadius = 10,
                 BorderSize = 1,
-                BorderColor = backColor == _surface ? Color.FromArgb(226, 232, 240) : backColor,
-                HoverBackColor = backColor == _surface ? Color.FromArgb(241, 245, 249) : Color.FromArgb(29, 78, 216),
-                HoverBorderColor = backColor == _surface ? Color.FromArgb(203, 213, 225) : Color.FromArgb(29, 78, 216),
-                PressedBackColor = backColor == _surface ? Color.FromArgb(229, 231, 235) : Color.FromArgb(30, 58, 138),
-                PressedBorderColor = backColor == _surface ? Color.FromArgb(156, 163, 175) : Color.FromArgb(30, 58, 138)
+                BorderColor = border,
+                HoverBackColor = hoverBg,
+                HoverBorderColor = hoverBorder,
+                HoverForeColor = hoverFore,
+                PressedBackColor = pressedBg,
+                PressedBorderColor = pressedBorder,
+                PressedForeColor = pressedFore
             };
             b.Click += click;
             return b;
@@ -949,7 +1026,7 @@ namespace RcloneDriveManager
 
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 
-            var parentBgColor = tabs.Parent?.BackColor ?? Color.FromArgb(248, 250, 252);
+            var parentBgColor = tabs.Parent?.BackColor ?? Color.FromArgb(240, 240, 243);
             using (var clearBrush = new SolidBrush(parentBgColor))
                 g.FillRectangle(clearBrush, bounds);
 
@@ -1358,6 +1435,30 @@ namespace RcloneDriveManager
 
         private Button LogButton(string text, EventHandler click, Color foreColor, int width)
         {
+            Color hoverBg, hoverBorder, hoverFore;
+            Color pressedBg, pressedBorder, pressedFore;
+            
+            if (foreColor == _danger)
+            {
+                hoverBg = Color.FromArgb(254, 242, 242);
+                hoverBorder = Color.FromArgb(252, 165, 165);
+                hoverFore = Color.FromArgb(220, 38, 38);
+                
+                pressedBg = Color.FromArgb(254, 226, 226);
+                pressedBorder = Color.FromArgb(239, 68, 68);
+                pressedFore = Color.FromArgb(185, 28, 28);
+            }
+            else
+            {
+                hoverBg = Color.FromArgb(243, 248, 255);
+                hoverBorder = Color.FromArgb(191, 219, 254);
+                hoverFore = _primary;
+                
+                pressedBg = Color.FromArgb(219, 234, 254);
+                pressedBorder = Color.FromArgb(96, 165, 250);
+                pressedFore = Color.FromArgb(30, 58, 138);
+            }
+
             var b = new RoundedButton
             {
                 Text = text,
@@ -1366,14 +1467,16 @@ namespace RcloneDriveManager
                 Margin = new Padding(3, 0, 3, 0),
                 BackColor = Color.White,
                 ForeColor = foreColor,
-                Font = new Font("Segoe UI", 8F, FontStyle.Bold),
-                BorderRadius = 6,
+                Font = new Font("Segoe UI", 8.5F, FontStyle.Bold),
+                BorderRadius = 8,
                 BorderSize = 1,
                 BorderColor = Color.FromArgb(203, 213, 225),
-                HoverBackColor = Color.FromArgb(248, 250, 252),
-                HoverBorderColor = Color.FromArgb(148, 163, 184),
-                PressedBackColor = Color.FromArgb(241, 245, 249),
-                PressedBorderColor = Color.FromArgb(100, 116, 139)
+                HoverBackColor = hoverBg,
+                HoverBorderColor = hoverBorder,
+                HoverForeColor = hoverFore,
+                PressedBackColor = pressedBg,
+                PressedBorderColor = pressedBorder,
+                PressedForeColor = pressedFore
             };
             b.Click += click;
             return b;
@@ -5668,8 +5771,10 @@ namespace RcloneDriveManager
 
         public Color HoverBackColor { get; set; }
         public Color HoverBorderColor { get; set; }
+        public Color HoverForeColor { get; set; }
         public Color PressedBackColor { get; set; }
         public Color PressedBorderColor { get; set; }
+        public Color PressedForeColor { get; set; }
 
         private bool _isHovered = false;
         private bool _isPressed = false;
@@ -5750,11 +5855,13 @@ namespace RcloneDriveManager
                 {
                     backColor = PressedBackColor != Color.Empty ? PressedBackColor : BackColor;
                     borderColor = PressedBorderColor != Color.Empty ? PressedBorderColor : (BorderColor != Color.Transparent ? BorderColor : backColor);
+                    foreColor = PressedForeColor != Color.Empty ? PressedForeColor : ForeColor;
                 }
                 else if (_isHovered)
                 {
                     backColor = HoverBackColor != Color.Empty ? HoverBackColor : BackColor;
                     borderColor = HoverBorderColor != Color.Empty ? HoverBorderColor : (BorderColor != Color.Transparent ? BorderColor : backColor);
+                    foreColor = HoverForeColor != Color.Empty ? HoverForeColor : ForeColor;
                 }
                 else
                 {
