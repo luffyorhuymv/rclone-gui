@@ -89,7 +89,7 @@ namespace RcloneDriveManager
             ExtraArgs = "";
             TunnelEnabled = false;
             TunnelHostname = "";
-            TunnelLocalPort = 2221;
+            TunnelLocalPort = 0;
             TunnelCommand = "";
         }
 
@@ -236,7 +236,6 @@ namespace RcloneDriveManager
         private CheckBox autoMountBox;
         private CheckBox networkModeBox;
         private CheckBox tunnelEnabledBox;
-        private TextBox tunnelHostnameBox;
         private NumericUpDown tunnelPortBox;
         private TextBox tunnelCommandBox;
         private RichTextBox logBox;
@@ -492,8 +491,7 @@ namespace RcloneDriveManager
             mountPresetCombo.SelectedItem = "Nhanh/RaiDrive";
             cacheMaxAgeBox = AddText(panel, "Giữ cache tối đa", "72h", 1, 4);
             writeBackBox = AddText(panel, "Upload sau khi sửa", "5s", 0, 5);
-            tunnelHostnameBox = AddText(panel, "CF Access hostname", "", 1, 5);
-            tunnelPortBox = AddNumber(panel, "Tunnel local port (0 = tự chọn)", 2221, 0, 65535, 0, 6);
+            tunnelPortBox = AddNumber(panel, "Tunnel local port (0 = tự chọn)", 0, 0, 65535, 1, 5);
             tunnelCommandBox = new TextBox { Text = "", Height = 54, Multiline = true, ScrollBars = ScrollBars.Vertical };
             panel.Controls.Add(Wrap("Lệnh tunnel tùy chỉnh", tunnelCommandBox), 1, 6);
             extraArgsBox = new TextBox { Text = "", Height = 54, Multiline = true, ScrollBars = ScrollBars.Vertical };
@@ -1712,8 +1710,7 @@ namespace RcloneDriveManager
                 transfersBox.Value = Math.Max(transfersBox.Minimum, Math.Min(transfersBox.Maximum, p.Transfers <= 0 ? 4 : p.Transfers));
                 bufferBox.Value = Math.Max(bufferBox.Minimum, Math.Min(bufferBox.Maximum, p.BufferSizeMb <= 0 ? 32 : p.BufferSizeMb));
                 tunnelEnabledBox.Checked = p.TunnelEnabled || !string.IsNullOrWhiteSpace(p.TunnelCommand);
-                tunnelHostnameBox.Text = p.TunnelHostname ?? "";
-                tunnelPortBox.Value = Math.Max(tunnelPortBox.Minimum, Math.Min(tunnelPortBox.Maximum, p.TunnelLocalPort <= 0 ? 2221 : p.TunnelLocalPort));
+                tunnelPortBox.Value = Math.Max(tunnelPortBox.Minimum, Math.Min(tunnelPortBox.Maximum, p.TunnelLocalPort));
                 tunnelCommandBox.Text = p.TunnelCommand ?? "";
                 extraArgsBox.Text = p.ExtraArgs ?? "";
                 _profileNameEditedByUser = !ShouldAutoReplaceProfileName(p.Name);
@@ -1774,7 +1771,6 @@ namespace RcloneDriveManager
             p.BufferSizeMb = (int)bufferBox.Value;
             p.MountPreset = Convert.ToString(mountPresetCombo.SelectedItem ?? mountPresetCombo.Text ?? "Nhanh/RaiDrive");
             p.TunnelEnabled = tunnelEnabledBox.Checked;
-            p.TunnelHostname = tunnelHostnameBox.Text.Trim();
             p.TunnelLocalPort = (int)tunnelPortBox.Value;
             p.TunnelCommand = tunnelCommandBox.Text.Trim();
             p.ExtraArgs = extraArgsBox.Text.Trim();
@@ -1825,7 +1821,7 @@ namespace RcloneDriveManager
                 BufferSizeMb = (int)bufferBox.Value,
                 MountPreset = Convert.ToString(mountPresetCombo.SelectedItem ?? mountPresetCombo.Text ?? "Nhanh/RaiDrive"),
                 TunnelEnabled = tunnelEnabledBox.Checked,
-                TunnelHostname = tunnelHostnameBox.Text.Trim(),
+                TunnelHostname = "",
                 TunnelLocalPort = (int)tunnelPortBox.Value,
                 TunnelCommand = tunnelCommandBox.Text.Trim(),
                 ExtraArgs = extraArgsBox.Text.Trim()
@@ -2883,7 +2879,7 @@ namespace RcloneDriveManager
                 BufferSizeMb = (int)bufferBox.Value,
                 MountPreset = Convert.ToString(mountPresetCombo.SelectedItem ?? mountPresetCombo.Text ?? "Nhanh/RaiDrive"),
                 TunnelEnabled = tunnelEnabledBox.Checked,
-                TunnelHostname = tunnelHostnameBox.Text.Trim(),
+                TunnelHostname = "",
                 TunnelLocalPort = (int)tunnelPortBox.Value,
                 TunnelCommand = tunnelCommandBox.Text.Trim(),
                 ExtraArgs = extraArgsBox.Text.Trim()
@@ -2906,10 +2902,15 @@ namespace RcloneDriveManager
 
         private async Task<bool> EnsureProfileTunnelAsync(DriveProfile p)
         {
-            if (p != null && p.TunnelEnabled && string.IsNullOrWhiteSpace(p.TunnelCommand) && string.IsNullOrWhiteSpace(p.TunnelHostname))
+            if (p != null && p.TunnelEnabled && string.IsNullOrWhiteSpace(p.TunnelCommand))
             {
-                AddLog("Da tick Mount Cloudflare tunnel nhung chua nhap CF Access hostname.", "ERROR");
-                return false;
+                var originalHost = ResolveTunnelHostnameFromRemote(p);
+                if (string.IsNullOrWhiteSpace(originalHost))
+                {
+                    AddLog("Da tick Mount Cloudflare tunnel nhung khong lay duoc hostname tu rclone config.", "ERROR");
+                    return false;
+                }
+                p.TunnelHostname = originalHost;
             }
             var command = BuildTunnelCommand(p);
             if (string.IsNullOrWhiteSpace(command)) return true;
@@ -2995,11 +2996,27 @@ namespace RcloneDriveManager
             var custom = (p.TunnelCommand ?? "").Trim();
             if (!string.IsNullOrWhiteSpace(custom)) return custom;
             if (!p.TunnelEnabled) return "";
-            var hostname = (p.TunnelHostname ?? "").Trim();
+            var hostname = ResolveTunnelHostnameFromRemote(p);
             if (string.IsNullOrWhiteSpace(hostname)) return "";
             var port = ResolveTunnelLocalPort(p);
             var exe = FindCloudflaredExe();
             return QuoteIfNeeded(exe) + " access tcp --hostname " + QuoteIfNeeded(hostname) + " --url localhost:" + port;
+        }
+
+        private string ResolveTunnelHostnameFromRemote(DriveProfile p)
+        {
+            if (p == null) return "";
+            var remoteHost = GetRemoteConfigValue(p.Remote, "host");
+            if (!string.IsNullOrWhiteSpace(remoteHost) &&
+                !string.Equals(remoteHost, "localhost", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(remoteHost, "127.0.0.1", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(remoteHost, "::1", StringComparison.OrdinalIgnoreCase))
+            {
+                p.TunnelHostname = remoteHost;
+                SaveProfiles();
+                return remoteHost;
+            }
+            return (p.TunnelHostname ?? "").Trim();
         }
 
         private int ResolveTunnelLocalPort(DriveProfile p)
@@ -3967,8 +3984,13 @@ namespace RcloneDriveManager
 
         private string GetRemoteType(string remote)
         {
+            return GetRemoteConfigValue(remote, "type");
+        }
+
+        private string GetRemoteConfigValue(string remote, string key)
+        {
             var name = (remote ?? "").Trim().TrimEnd(':');
-            if (string.IsNullOrWhiteSpace(name)) return "";
+            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(key)) return "";
             try
             {
                 var configPath = GetRcloneConfigPathSync();
@@ -3983,7 +4005,7 @@ namespace RcloneDriveManager
                         continue;
                     }
                     if (!string.Equals(currentSection, name, StringComparison.OrdinalIgnoreCase)) continue;
-                    if (!line.StartsWith("type", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!line.StartsWith(key, StringComparison.OrdinalIgnoreCase)) continue;
                     var idx = line.IndexOf('=');
                     if (idx < 0) continue;
                     return line.Substring(idx + 1).Trim();

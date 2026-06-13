@@ -42,20 +42,21 @@ Linux không dùng ký tự ổ như `X:`/`Y:`. Script mount vào thư mục, t�
 
 ## Cloudflare Access TCP tunnel
 
-Với SFTP/SSH nằm sau Cloudflare Access, bật `Cloudflare tunnel` trong profile rồi nhập:
+Với SFTP/SSH nằm sau Cloudflare Access, hãy để rclone remote giữ `host` là hostname thật lúc cấu hình, ví dụ:
 
 ```text
-CF Access hostname: lapp.apphay.io.vn
-Tunnel local port: 2221
+host = lapp.apphay.io.vn
 ```
 
-App sẽ tự chạy:
+Bật `Mount Cloudflare tunnel` trong profile. `Tunnel local port` để `0` thì app tự chọn port trống từ `2221` trở lên.
+
+App tự lấy hostname từ rclone config và chạy:
 
 ```text
-cloudflared access tcp --hostname lapp.apphay.io.vn --url localhost:2221
+cloudflared access tcp --hostname <host trong rclone config> --url localhost:<port auto>
 ```
 
-Sau đó app tự chỉnh remote rclone dùng `host=localhost` và `port=2221` trước khi test/mount.
+Sau đó app tự chỉnh remote rclone dùng `host=localhost` và `port=<port auto>` trước khi test/mount. Host gốc được lưu trong profile để lần sau vẫn tự bật tunnel đúng hostname.
 
 ## Source
 
