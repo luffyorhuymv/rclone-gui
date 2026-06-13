@@ -366,7 +366,7 @@ namespace RcloneDriveManager
                 OwnerDraw = true,
                 HeaderStyle = ColumnHeaderStyle.None,
                 ShowItemToolTips = true,
-                SmallImageList = new ImageList { ImageSize = new Size(1, 68) }
+                SmallImageList = new ImageList { ImageSize = new Size(1, 74) }
             };
             profileList.Columns.Add("Ổ", 308);
             profileList.DrawColumnHeader += (s, e) => e.DrawDefault = false;
@@ -929,7 +929,7 @@ namespace RcloneDriveManager
 
         private Button ActionButton(string text, EventHandler click, Color backColor, Color foreColor, int width)
         {
-            var b = new Button
+            var b = new RoundedButton
             {
                 Text = text,
                 Width = width,
@@ -937,14 +937,15 @@ namespace RcloneDriveManager
                 Margin = new Padding(2, 3, 2, 3),
                 BackColor = backColor,
                 ForeColor = foreColor,
-                FlatStyle = FlatStyle.Flat,
                 Font = new Font("Segoe UI", 8F, FontStyle.Bold),
-                Cursor = Cursors.Hand
+                BorderRadius = 6,
+                BorderSize = 1,
+                BorderColor = backColor == _surface ? Color.FromArgb(226, 232, 240) : backColor,
+                HoverBackColor = backColor == _surface ? Color.FromArgb(241, 245, 249) : Color.FromArgb(29, 78, 216),
+                HoverBorderColor = backColor == _surface ? Color.FromArgb(203, 213, 225) : Color.FromArgb(29, 78, 216),
+                PressedBackColor = backColor == _surface ? Color.FromArgb(229, 231, 235) : Color.FromArgb(30, 58, 138),
+                PressedBorderColor = backColor == _surface ? Color.FromArgb(156, 163, 175) : Color.FromArgb(30, 58, 138)
             };
-            b.FlatAppearance.BorderColor = backColor == _surface ? Color.FromArgb(226, 232, 240) : backColor;
-            b.FlatAppearance.BorderSize = 1;
-            b.FlatAppearance.MouseOverBackColor = backColor == _surface ? Color.FromArgb(241, 245, 249) : Color.FromArgb(29, 78, 216);
-            b.FlatAppearance.MouseDownBackColor = backColor == _surface ? Color.FromArgb(229, 231, 235) : Color.FromArgb(30, 58, 138);
             b.Click += click;
             return b;
         }
@@ -953,23 +954,46 @@ namespace RcloneDriveManager
         {
             var selected = e.Index == mainTabs.SelectedIndex;
             var bounds = e.Bounds;
-            bounds.Inflate(-2, -2);
-            using (var bg = new SolidBrush(selected ? _surface : Color.FromArgb(241, 245, 249)))
-                e.Graphics.FillRectangle(bg, bounds);
-            using (var border = new Pen(selected ? _primary : _line))
-                e.Graphics.DrawRectangle(border, bounds);
-            if (selected)
+
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using (var clearBrush = new SolidBrush(Color.FromArgb(248, 250, 252)))
+                e.Graphics.FillRectangle(clearBrush, bounds);
+
+            bounds.Inflate(-1, -1);
+            if (bounds.Width <= 12 || bounds.Height <= 12) return;
+
+            using (var path = GetTabPath(bounds, 6))
             {
-                using (var accent = new SolidBrush(_primary))
-                    e.Graphics.FillRectangle(accent, bounds.Left, bounds.Top, bounds.Width, 3);
+                var bgClr = selected ? _surface : Color.FromArgb(241, 245, 249);
+                using (var bg = new SolidBrush(bgClr))
+                    e.Graphics.FillPath(bg, path);
+
+                using (var border = new Pen(selected ? _primary : _line, 1.2F))
+                    e.Graphics.DrawPath(border, path);
             }
+
             TextRenderer.DrawText(
                 e.Graphics,
                 mainTabs.TabPages[e.Index].Text,
                 mainTabs.Font,
                 bounds,
-                selected ? _text : _muted,
+                selected ? _primary : _muted,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        }
+
+        private System.Drawing.Drawing2D.GraphicsPath GetTabPath(Rectangle rect, float radius)
+        {
+            var path = new System.Drawing.Drawing2D.GraphicsPath();
+            float r2 = radius * 2f;
+            path.StartFigure();
+            path.AddLine(rect.X, rect.Bottom, rect.X, rect.Y + radius);
+            path.AddArc(rect.X, rect.Y, r2, r2, 180, 90);
+            path.AddLine(rect.X + radius, rect.Y, rect.Right - radius, rect.Y);
+            path.AddArc(rect.Right - r2, rect.Y, r2, r2, 270, 90);
+            path.AddLine(rect.Right, rect.Y + radius, rect.Right, rect.Bottom);
+            path.AddLine(rect.Right, rect.Bottom, rect.X, rect.Bottom);
+            path.CloseFigure();
+            return path;
         }
 
         private void DrawDriveListItem(object sender, DrawListViewItemEventArgs e)
@@ -1034,28 +1058,30 @@ namespace RcloneDriveManager
             using (var accentBrush = new SolidBrush(accent))
                 g.FillRectangle(accentBrush, bounds.Left, bounds.Top, 5, bounds.Height);
 
-            var compactLayout = bounds.Width < 430;
             var actionRects = GetDriveRowActionRects(bounds);
             var actionLeft = actionRects.Count == 0 ? bounds.Right - 8 : actionRects.Min(r => r.Left);
             var textLeft = bounds.Left + 50;
-            var textRight = compactLayout ? bounds.Right - 10 : actionLeft - 10;
+            var textRight = actionLeft - 10;
             var textWidth = Math.Max(24, textRight - textLeft);
 
-            var driveRect = new Rectangle(bounds.Left + 16, bounds.Top + 16, 28, 18);
+            var driveRect = new Rectangle(bounds.Left + 16, bounds.Top + (bounds.Height - 18) / 2, 28, 18);
             TextRenderer.DrawText(g, IsAutoDrive(drive) ? "A:" : drive, new Font("Segoe UI", 7.6F, FontStyle.Bold),
                 driveRect, selected ? _primary : _text, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
             TextRenderer.DrawText(g, name, new Font("Segoe UI", 9.3F, FontStyle.Bold),
-                new Rectangle(textLeft, bounds.Top + 8, textWidth, 20),
+                new Rectangle(textLeft, bounds.Top + 6, textWidth, 20),
                 _text, TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
 
             TextRenderer.DrawText(g, source, new Font("Segoe UI", 7.5F),
-                new Rectangle(textLeft, bounds.Top + 28, textWidth, 18),
+                new Rectangle(textLeft, bounds.Top + 26, textWidth, 16),
                 _muted, TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
 
-            var barRight = compactLayout ? actionLeft - 8 : textLeft + textWidth;
-            var barWidth = Math.Max(28, barRight - textLeft);
-            var barRect = new Rectangle(textLeft, bounds.Bottom - 18, barWidth, 5);
+            TextRenderer.DrawText(g, capacityText, new Font("Segoe UI", 7.8F),
+                new Rectangle(textLeft, bounds.Top + 42, textWidth, 16),
+                _muted,
+                TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+
+            var barRect = new Rectangle(textLeft, bounds.Top + 60, textWidth, 5);
             using (var barBack = new SolidBrush(Color.FromArgb(226, 232, 240)))
                 g.FillRectangle(barBack, barRect);
             if (usedRatio.HasValue)
@@ -1064,11 +1090,6 @@ namespace RcloneDriveManager
                 using (var barFill = new SolidBrush(_primary))
                     g.FillRectangle(barFill, barRect.Left, barRect.Top, fillWidth, barRect.Height);
             }
-
-            TextRenderer.DrawText(g, capacityText, new Font("Segoe UI", 7.8F),
-                new Rectangle(textLeft, bounds.Bottom - 35, barWidth, 16),
-                _muted,
-                TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
 
             DrawDriveRowAction(g, actionRects[0], mounted ? DriveRowActionIcon.Disconnect : DriveRowActionIcon.Connect, mounted ? _danger : _success, true);
             DrawDriveRowAction(g, actionRects[1], DriveRowActionIcon.Settings, _muted, profile != null);
@@ -1091,9 +1112,7 @@ namespace RcloneDriveManager
             var medium = bounds.Width < 500;
             var size = compact ? 26 : medium ? 30 : 34;
             var gap = compact ? 5 : medium ? 7 : 10;
-            var top = compact
-                ? bounds.Bottom - size - 8
-                : bounds.Top + Math.Max(6, (bounds.Height - size) / 2);
+            var top = bounds.Top + (bounds.Height - size) / 2;
             var right = bounds.Right - (compact ? 6 : 12);
             var rects = new List<Rectangle>();
             for (var i = 0; i < 4; i++)
@@ -1356,7 +1375,7 @@ namespace RcloneDriveManager
 
         private Button LogButton(string text, EventHandler click, Color foreColor, int width)
         {
-            var b = new Button
+            var b = new RoundedButton
             {
                 Text = text,
                 Width = width,
@@ -1364,14 +1383,15 @@ namespace RcloneDriveManager
                 Margin = new Padding(3, 0, 3, 0),
                 BackColor = Color.White,
                 ForeColor = foreColor,
-                FlatStyle = FlatStyle.Flat,
                 Font = new Font("Segoe UI", 8F, FontStyle.Bold),
-                Cursor = Cursors.Hand
+                BorderRadius = 6,
+                BorderSize = 1,
+                BorderColor = Color.FromArgb(203, 213, 225),
+                HoverBackColor = Color.FromArgb(248, 250, 252),
+                HoverBorderColor = Color.FromArgb(148, 163, 184),
+                PressedBackColor = Color.FromArgb(241, 245, 249),
+                PressedBorderColor = Color.FromArgb(100, 116, 139)
             };
-            b.FlatAppearance.BorderColor = Color.FromArgb(203, 213, 225);
-            b.FlatAppearance.BorderSize = 1;
-            b.FlatAppearance.MouseOverBackColor = Color.FromArgb(248, 250, 252);
-            b.FlatAppearance.MouseDownBackColor = Color.FromArgb(241, 245, 249);
             b.Click += click;
             return b;
         }
@@ -3165,8 +3185,10 @@ namespace RcloneDriveManager
                 note.BringToFront();
 
                 var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 58, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(14, 10, 14, 10) };
-                var ok = new Button { Text = "Lưu", Width = 96, DialogResult = DialogResult.OK };
-                var cancel = new Button { Text = "Hủy", Width = 96, DialogResult = DialogResult.Cancel };
+                var ok = ActionButton("Lưu", (s, e) => {}, _primary, Color.White, 96);
+                ok.DialogResult = DialogResult.OK;
+                var cancel = ActionButton("Hủy", (s, e) => {}, _surface, _text, 96);
+                cancel.DialogResult = DialogResult.Cancel;
                 buttons.Controls.Add(ok);
                 buttons.Controls.Add(cancel);
                 form.Controls.Add(buttons);
@@ -5652,6 +5674,148 @@ namespace RcloneDriveManager
                 form.CancelButton = cancel;
                 return form.ShowDialog() == DialogResult.OK ? input.Text : "";
             }
+        }
+    }
+
+    public class RoundedButton : Button
+    {
+        public int BorderRadius { get; set; } = 6;
+        public Color BorderColor { get; set; } = Color.Transparent;
+        public int BorderSize { get; set; } = 1;
+
+        public Color HoverBackColor { get; set; }
+        public Color HoverBorderColor { get; set; }
+        public Color PressedBackColor { get; set; }
+        public Color PressedBorderColor { get; set; }
+
+        private bool _isHovered = false;
+        private bool _isPressed = false;
+
+        public RoundedButton()
+        {
+            FlatStyle = FlatStyle.Flat;
+            FlatAppearance.BorderSize = 0;
+            Cursor = Cursors.Hand;
+            DoubleBuffered = true;
+        }
+
+        protected override void OnMouseEnter(EventArgs e)
+        {
+            _isHovered = true;
+            Invalidate();
+            base.OnMouseEnter(e);
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            _isHovered = false;
+            _isPressed = false;
+            Invalidate();
+            base.OnMouseLeave(e);
+        }
+
+        protected override void OnMouseDown(MouseEventArgs mevent)
+        {
+            if (mevent.Button == MouseButtons.Left)
+            {
+                _isPressed = true;
+                Invalidate();
+            }
+            base.OnMouseDown(mevent);
+        }
+
+        protected override void OnMouseUp(MouseEventArgs mevent)
+        {
+            _isPressed = false;
+            Invalidate();
+            base.OnMouseUp(mevent);
+        }
+
+        private System.Drawing.Drawing2D.GraphicsPath GetRoundedPath(Rectangle rect, float radius)
+        {
+            var path = new System.Drawing.Drawing2D.GraphicsPath();
+            float r2 = radius * 2f;
+            path.StartFigure();
+            path.AddArc(rect.X, rect.Y, r2, r2, 180, 90);
+            path.AddArc(rect.Right - r2, rect.Y, r2, r2, 270, 90);
+            path.AddArc(rect.Right - r2, rect.Bottom - r2, r2, r2, 0, 90);
+            path.AddArc(rect.X, rect.Bottom - r2, r2, r2, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
+        protected override void OnPaint(PaintEventArgs pevent)
+        {
+            var g = pevent.Graphics;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+            var rect = ClientRectangle;
+
+            var backColor = BackColor;
+            var borderColor = BorderColor;
+            var foreColor = ForeColor;
+
+            if (!Enabled)
+            {
+                backColor = Color.FromArgb(243, 244, 246);
+                borderColor = Color.FromArgb(226, 232, 240);
+                foreColor = Color.FromArgb(156, 163, 175);
+            }
+            else
+            {
+                if (_isPressed)
+                {
+                    backColor = PressedBackColor != Color.Empty ? PressedBackColor : BackColor;
+                    borderColor = PressedBorderColor != Color.Empty ? PressedBorderColor : (BorderColor != Color.Transparent ? BorderColor : backColor);
+                }
+                else if (_isHovered)
+                {
+                    backColor = HoverBackColor != Color.Empty ? HoverBackColor : BackColor;
+                    borderColor = HoverBorderColor != Color.Empty ? HoverBorderColor : (BorderColor != Color.Transparent ? BorderColor : backColor);
+                }
+                else
+                {
+                    if (borderColor == Color.Transparent)
+                        borderColor = backColor;
+                }
+            }
+
+            var clearColor = Parent?.BackColor ?? SystemColors.Control;
+            using (var clearBrush = new SolidBrush(clearColor))
+            {
+                g.FillRectangle(clearBrush, rect);
+            }
+
+            if (rect.Width > BorderRadius * 2 && rect.Height > BorderRadius * 2)
+            {
+                var drawRect = new Rectangle(rect.X, rect.Y, rect.Width - 1, rect.Height - 1);
+                using (var path = GetRoundedPath(drawRect, BorderRadius))
+                {
+                    using (var brush = new SolidBrush(backColor))
+                    {
+                        g.FillPath(brush, path);
+                    }
+
+                    if (BorderSize > 0 && borderColor != Color.Transparent)
+                    {
+                        using (var pen = new Pen(borderColor, BorderSize))
+                        {
+                            pen.Alignment = System.Drawing.Drawing2D.PenAlignment.Inset;
+                            g.DrawPath(pen, path);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                using (var brush = new SolidBrush(backColor))
+                {
+                    g.FillRectangle(brush, rect);
+                }
+            }
+
+            var textFlags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis;
+            TextRenderer.DrawText(g, Text, Font, rect, foreColor, textFlags);
         }
     }
 }

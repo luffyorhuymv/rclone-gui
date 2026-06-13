@@ -21,6 +21,7 @@ RcloneDrive.exe
 ## Nguyen tac lam viec
 
 - Doc `README.md`, `CHANGELOG.md`, `docs/OPERATIONS.md`, `docs/TROUBLESHOOTING.md` truoc khi sua logic lon.
+- Neu lam viec voi Git, push hoac release, doc them file an `.agent-git-release.md` truoc.
 - Uu tien sua trong `RcloneDriveManager/Program.cs`; app hien la WinForms single-file.
 - Khong dung lenh pha huy nhu `git reset --hard` hoac xoa hang loat file neu khong duoc yeu cau ro.
 - Neu build bi loi vi `RcloneDrive.exe` dang bi khoa, chi dong process `RcloneDrive.exe`; khong dung `rclone.exe` vi co the dang mount o.
