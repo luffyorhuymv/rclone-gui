@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.3";
+        private const string AppVersion = "1.0.4";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -474,10 +474,9 @@ namespace RcloneDriveManager
         {
             var page = new TabPage("Ổ đĩa") { BackColor = _surface, Padding = new Padding(18) };
             page.AutoScroll = true;
-            var pageLayout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, RowCount = 3, ColumnCount = 1, BackColor = _surface };
+            var pageLayout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, RowCount = 2, ColumnCount = 1, BackColor = _surface };
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 700));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 430));
             page.Controls.Add(pageLayout);
 
             var actionBar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, BackColor = _surface, Padding = new Padding(0, 4, 0, 8) };
@@ -511,60 +510,119 @@ namespace RcloneDriveManager
             actionBar.Controls.Add(toolGroup, 0, 1);
             actionBar.SetColumnSpan(toolGroup, 2);
             pageLayout.Controls.Add(actionBar, 0, 0);
-            var checks = new FlowLayoutPanel { Dock = DockStyle.Fill, Height = 46, Padding = new Padding(0, 6, 0, 4), BackColor = _surface };
+            var configTabs = new TabControl
+            {
+                Dock = DockStyle.Fill,
+                DrawMode = TabDrawMode.OwnerDrawFixed,
+                SizeMode = TabSizeMode.Fixed,
+                ItemSize = new Size(118, 32),
+                Padding = new Point(14, 6),
+                Font = new Font("Segoe UI", 9F, FontStyle.Bold)
+            };
+            configTabs.DrawItem += DrawSecondaryTab;
+            pageLayout.Controls.Add(configTabs, 0, 1);
+
+            var basicPage = ConfigSectionPage("Cơ bản");
+            var basicPanel = ConfigGrid(3);
+            basicPage.Controls.Add(basicPanel);
+            nameBox = AddText(basicPanel, "Tên profile", "Ổ mới", 0, 0);
+            nameBox.TextChanged += (s, e) =>
+            {
+                if (!_loadingProfileFields && !_changingProfileNameAutomatically)
+                    _profileNameEditedByUser = true;
+            };
+            remoteCombo = AddCombo(basicPanel, "Remote", 1, 0);
+            remoteCombo.SelectedIndexChanged += (s, e) => AutoNameFromSelectedRemote();
+            pathBox = AddText(basicPanel, "Đường dẫn remote", "/", 0, 1);
+            driveCombo = AddCombo(basicPanel, "Ký tự ổ đĩa", 1, 1);
+            var checks = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(0, 8, 0, 0), BackColor = _surface };
             readOnlyBox = new CheckBox { Text = "Chỉ đọc", Width = 100 };
             autoMountBox = new CheckBox { Text = "Tự mount khi mở app", Width = 190 };
             networkModeBox = new CheckBox { Text = "Network mode", Width = 140, Checked = true };
             checks.Controls.Add(readOnlyBox);
             checks.Controls.Add(autoMountBox);
             checks.Controls.Add(networkModeBox);
-            tunnelEnabledBox = new CheckBox { Text = "Mount Cloudflare tunnel", Width = 210 };
-            checks.Controls.Add(tunnelEnabledBox);
-            pageLayout.Controls.Add(checks, 0, 1);
+            basicPanel.Controls.Add(checks, 0, 2);
+            basicPanel.SetColumnSpan(checks, 2);
+            configTabs.TabPages.Add(basicPage);
 
-            var panel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 9, CellBorderStyle = TableLayoutPanelCellBorderStyle.None, BackColor = _surface };
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
-            panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            pageLayout.Controls.Add(panel, 0, 2);
-
-            nameBox = AddText(panel, "Tên profile", "Ổ mới", 0, 0);
-            nameBox.TextChanged += (s, e) =>
-            {
-                if (!_loadingProfileFields && !_changingProfileNameAutomatically)
-                    _profileNameEditedByUser = true;
-            };
-            remoteCombo = AddCombo(panel, "Remote", 1, 0);
-            remoteCombo.SelectedIndexChanged += (s, e) => AutoNameFromSelectedRemote();
-            pathBox = AddText(panel, "Đường dẫn remote", "/", 0, 1);
-            driveCombo = AddCombo(panel, "Ký tự ổ đĩa", 1, 1);
-            cacheModeCombo = AddCombo(panel, "Chế độ VFS cache", 0, 2);
+            var cachePage = ConfigSectionPage("Cache");
+            var cachePanel = ConfigGrid(3);
+            cachePage.Controls.Add(cachePanel);
+            cacheModeCombo = AddCombo(cachePanel, "Chế độ VFS cache", 0, 0);
             cacheModeCombo.Items.AddRange(new object[] { "off", "minimal", "writes", "full" });
             cacheModeCombo.SelectedItem = "full";
-            cacheDirBox = AddText(panel, "Thư mục cache", "%USERPROFILE%\\.cache\\rclone", 1, 2);
-            transfersBox = AddNumber(panel, "Transfers", 4, 1, 64, 0, 3);
-            bufferBox = AddNumber(panel, "Bộ đệm MB", 32, 1, 1024, 1, 3);
-            mountPresetCombo = AddCombo(panel, "Preset mount", 0, 4);
+            cacheDirBox = AddText(cachePanel, "Thư mục cache", "%USERPROFILE%\\.cache\\rclone", 1, 0);
+            transfersBox = AddNumber(cachePanel, "Transfers", 4, 1, 64, 0, 1);
+            bufferBox = AddNumber(cachePanel, "Bộ đệm MB", 32, 1, 1024, 1, 1);
+            mountPresetCombo = AddCombo(cachePanel, "Preset mount", 0, 2);
             mountPresetCombo.Items.AddRange(new object[] { "Nhanh/RaiDrive", "OpenCode", "Live" });
             mountPresetCombo.SelectedItem = "Nhanh/RaiDrive";
-            cacheMaxAgeBox = AddText(panel, "Giữ cache tối đa", "72h", 1, 4);
-            writeBackBox = AddText(panel, "Upload sau khi sửa", "5s", 0, 5);
-            tunnelPortBox = AddNumber(panel, "Tunnel local port (0 = tự chọn)", 0, 0, 65535, 1, 5);
-            tunnelCommandBox = new TextBox { Text = "", Height = 54, Multiline = true, ScrollBars = ScrollBars.Vertical };
-            panel.Controls.Add(Wrap("Lệnh tunnel tùy chỉnh", tunnelCommandBox), 1, 6);
-            extraArgsBox = new TextBox { Text = "", Height = 54, Multiline = true, ScrollBars = ScrollBars.Vertical };
-            panel.Controls.Add(Wrap("Tham số rclone thêm", extraArgsBox), 0, 7);
-            panel.SetColumnSpan(extraArgsBox.Parent, 2);
+            cacheMaxAgeBox = AddText(cachePanel, "Giữ cache tối đa", "72h", 1, 2);
+            configTabs.TabPages.Add(cachePage);
 
+            var tunnelPage = ConfigSectionPage("Tunnel");
+            var tunnelPanel = ConfigGrid(3);
+            tunnelPage.Controls.Add(tunnelPanel);
+            writeBackBox = AddText(tunnelPanel, "Upload sau khi sửa", "5s", 0, 0);
+            tunnelPortBox = AddNumber(tunnelPanel, "Tunnel local port (0 = tự chọn)", 0, 0, 65535, 1, 0);
+            tunnelEnabledBox = new CheckBox { Text = "Mount Cloudflare tunnel", Width = 220, Dock = DockStyle.Fill };
+            tunnelPanel.Controls.Add(Wrap("Cloudflare Access", tunnelEnabledBox), 0, 1);
+            tunnelCommandBox = new TextBox { Text = "", Height = 54, Multiline = true, ScrollBars = ScrollBars.Vertical };
+            tunnelPanel.Controls.Add(Wrap("Lệnh tunnel tùy chỉnh", tunnelCommandBox), 1, 1);
+            configTabs.TabPages.Add(tunnelPage);
+
+            var advancedPage = ConfigSectionPage("Nâng cao");
+            var advancedPanel = ConfigGrid(2);
+            advancedPage.Controls.Add(advancedPanel);
+            extraArgsBox = new TextBox { Text = "", Height = 54, Multiline = true, ScrollBars = ScrollBars.Vertical };
+            advancedPanel.Controls.Add(Wrap("Tham số rclone thêm", extraArgsBox), 0, 0);
+            advancedPanel.SetColumnSpan(extraArgsBox.Parent, 2);
+            configTabs.TabPages.Add(advancedPage);
             return page;
+        }
+
+        private TabPage ConfigSectionPage(string title)
+        {
+            return new TabPage(title) { BackColor = _surface, Padding = new Padding(12, 14, 12, 8) };
+        }
+
+        private TableLayoutPanel ConfigGrid(int rows)
+        {
+            var panel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 2,
+                RowCount = rows,
+                BackColor = _surface
+            };
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            for (var i = 0; i < rows; i++)
+                panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 78));
+            return panel;
+        }
+
+        private void DrawSecondaryTab(object sender, DrawItemEventArgs e)
+        {
+            var tabs = sender as TabControl;
+            if (tabs == null) return;
+            var selected = e.Index == tabs.SelectedIndex;
+            var bounds = e.Bounds;
+            bounds.Inflate(-2, -2);
+            using (var bg = new SolidBrush(selected ? Color.FromArgb(239, 246, 255) : Color.FromArgb(248, 250, 252)))
+                e.Graphics.FillRectangle(bg, bounds);
+            using (var border = new Pen(selected ? _primary : _line))
+                e.Graphics.DrawRectangle(border, bounds);
+            TextRenderer.DrawText(
+                e.Graphics,
+                tabs.TabPages[e.Index].Text,
+                tabs.Font,
+                bounds,
+                selected ? _primary : _muted,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         }
 
         private TabPage BuildBrowserTab()
