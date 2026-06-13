@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.11";
+        private const string AppVersion = "1.0.12";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
