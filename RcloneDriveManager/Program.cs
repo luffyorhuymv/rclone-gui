@@ -901,7 +901,7 @@ namespace RcloneDriveManager
 
             var actionRects = GetDriveRowActionRects(bounds);
             var actionLeft = actionRects.Count == 0 ? bounds.Right - 8 : actionRects.Min(r => r.Left);
-            var textWidth = Math.Max(80, actionLeft - (bounds.Left + 88) - 14);
+            var textWidth = Math.Max(24, actionLeft - (bounds.Left + 88) - 10);
 
             TextRenderer.DrawText(g, name, new Font("Segoe UI", 9.3F, FontStyle.Bold),
                 new Rectangle(bounds.Left + 88, bounds.Top + 8, textWidth, 20),
@@ -939,10 +939,12 @@ namespace RcloneDriveManager
 
         private List<Rectangle> GetDriveRowActionRects(Rectangle bounds)
         {
-            var size = 34;
-            var gap = 10;
+            var compact = bounds.Width < 360;
+            var medium = bounds.Width < 430;
+            var size = compact ? 26 : medium ? 30 : 34;
+            var gap = compact ? 5 : medium ? 7 : 10;
             var top = bounds.Top + Math.Max(6, (bounds.Height - size) / 2);
-            var right = bounds.Right - 12;
+            var right = bounds.Right - (compact ? 6 : 12);
             var rects = new List<Rectangle>();
             for (var i = 0; i < 4; i++)
             {
@@ -954,10 +956,11 @@ namespace RcloneDriveManager
 
         private void DrawDriveRowAction(Graphics g, Rectangle rect, string glyph, string fallback, Color accent)
         {
-            using (var pen = new Pen(Color.FromArgb(135, 135, 135), 2))
+            var compact = rect.Width < 30;
+            using (var pen = new Pen(Color.FromArgb(135, 135, 135), compact ? 1.6F : 2F))
                 g.DrawEllipse(pen, rect);
             var glyphColor = accent == _danger ? Color.FromArgb(220, 220, 220) : Color.White;
-            TextRenderer.DrawText(g, glyph, new Font("Segoe UI Symbol", 12F, FontStyle.Bold),
+            TextRenderer.DrawText(g, glyph, new Font("Segoe UI Symbol", compact ? 9.5F : 12F, FontStyle.Bold),
                 rect, glyphColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         }
 
