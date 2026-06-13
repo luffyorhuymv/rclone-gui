@@ -211,14 +211,14 @@ namespace RcloneDriveManager
         private readonly List<MountedDriveInfo> _mountedExternalDrives = new List<MountedDriveInfo>();
         private readonly Dictionary<string, MountedDriveInfo> _detectedRcloneDrives = new Dictionary<string, MountedDriveInfo>(StringComparer.OrdinalIgnoreCase);
         private Process _webUiProcess;
-        private readonly Color _bg = Color.FromArgb(241, 245, 249);
+        private readonly Color _bg = Color.FromArgb(248, 250, 252);
         private readonly Color _surface = Color.White;
-        private readonly Color _line = Color.FromArgb(226, 232, 240);
-        private readonly Color _text = Color.FromArgb(17, 24, 39);
-        private readonly Color _muted = Color.FromArgb(100, 116, 139);
-        private readonly Color _primary = Color.FromArgb(29, 78, 216);
-        private readonly Color _danger = Color.FromArgb(185, 28, 28);
-        private readonly Color _success = Color.FromArgb(22, 163, 74);
+        private readonly Color _line = Color.FromArgb(229, 231, 235);
+        private readonly Color _text = Color.FromArgb(25, 28, 29);
+        private readonly Color _muted = Color.FromArgb(66, 71, 84);
+        private readonly Color _primary = Color.FromArgb(33, 112, 228);
+        private readonly Color _danger = Color.FromArgb(239, 68, 68);
+        private readonly Color _success = Color.FromArgb(16, 185, 129);
 
         private ListView profileList;
         private Button headerConnectButton;
@@ -278,9 +278,9 @@ namespace RcloneDriveManager
             _profilesFile = Path.Combine(_dataDir, "profiles.json");
 
             Text = "Trình quản lý ổ Rclone";
-            Width = 1366;
-            Height = 840;
-            MinimumSize = new Size(1280, 820);
+            Width = 1200;
+            Height = 720;
+            MinimumSize = new Size(1100, 680);
             StartPosition = FormStartPosition.Manual;
             Font = new Font("Segoe UI", 9F);
             var iconPath = Path.Combine(_appDir, "RcloneDriveManager", "RcloneDrive.ico");
@@ -311,28 +311,28 @@ namespace RcloneDriveManager
         {
             BackColor = _bg;
             var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, BackColor = _bg };
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 130));
-            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 430));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 340));
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             Controls.Add(root);
 
-            var header = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = _surface, Padding = new Padding(18, 12, 18, 10), ColumnCount = 2, RowCount = 1 };
+            var header = new TableLayoutPanel { Dock = DockStyle.Fill, BackColor = _surface, Padding = new Padding(14, 6, 14, 6), ColumnCount = 2, RowCount = 1 };
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 880));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 480));
             root.Controls.Add(header, 0, 0);
             root.SetColumnSpan(header, 2);
 
             var titleBlock = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _surface };
-            titleBlock.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-            titleBlock.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
-            titleBlock.Controls.Add(new Label { Text = "Trình quản lý ổ Rclone", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 15F, FontStyle.Bold), ForeColor = _text, TextAlign = ContentAlignment.BottomLeft }, 0, 0);
-            versionLabel = new Label { Text = "Kết nối, mount, duyệt file và quản lý config rclone - v" + AppVersion, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9F), ForeColor = _muted, TextAlign = ContentAlignment.TopLeft };
+            titleBlock.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            titleBlock.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
+            titleBlock.Controls.Add(new Label { Text = "RcloneDrive", Dock = DockStyle.Fill, Font = new Font("Segoe UI", 12F, FontStyle.Bold), ForeColor = _text, TextAlign = ContentAlignment.BottomLeft }, 0, 0);
+            versionLabel = new Label { Text = "v" + AppVersion, Dock = DockStyle.Fill, Font = new Font("Segoe UI", 8F), ForeColor = _muted, TextAlign = ContentAlignment.TopLeft };
             titleBlock.Controls.Add(versionLabel, 0, 1);
             header.Controls.Add(titleBlock, 0, 0);
 
-            var headerActions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, BackColor = _surface, Padding = new Padding(0, 8, 0, 0) };
+            var headerActions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, BackColor = _surface, Padding = new Padding(0, 4, 0, 0) };
             headerActions.Controls.Add(ActionButton("Web UI", (s, e) => StartWebUi(), _surface, _text, 92));
             headerActions.Controls.Add(ActionButton("Làm mới", async (s, e) => await RefreshAllAsync(), _surface, _text, 104));
             headerActions.Controls.Add(ActionButton("Ngắt", (s, e) => UnmountSelected(), _surface, _danger, 86));
@@ -340,19 +340,17 @@ namespace RcloneDriveManager
             headerActions.Controls.Add(headerConnectButton);
             header.Controls.Add(headerActions, 1, 0);
 
-            var left = new Panel { Dock = DockStyle.Fill, BackColor = _surface, Padding = new Padding(18, 18, 14, 18) };
+            var left = new Panel { Dock = DockStyle.Fill, BackColor = _bg, Padding = new Padding(12, 12, 10, 12) };
             root.Controls.Add(left, 0, 1);
 
             var leftLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
-            leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+            leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
             leftLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 132));
+            leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
             left.Controls.Add(leftLayout);
-            var driveListTitle = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _surface };
-            driveListTitle.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-            driveListTitle.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
-            driveListTitle.Controls.Add(new Label { Text = "Ổ đã cấu hình", Font = new Font("Segoe UI", 13F, FontStyle.Bold), ForeColor = _text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.BottomLeft }, 0, 0);
-            driveListTitle.Controls.Add(new Label { Text = "Profile và ổ rclone đang mount", Font = new Font("Segoe UI", 8.5F), ForeColor = _muted, Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopLeft }, 0, 1);
+            var driveListTitle = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 1, BackColor = _bg };
+            driveListTitle.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+            driveListTitle.Controls.Add(new Label { Text = "Ổ đã cấu hình", Font = new Font("Segoe UI", 10F, FontStyle.Bold), ForeColor = _text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
             leftLayout.Controls.Add(driveListTitle, 0, 0);
 
             profileList = new ListView
@@ -362,15 +360,15 @@ namespace RcloneDriveManager
                 FullRowSelect = true,
                 HideSelection = false,
                 BorderStyle = BorderStyle.None,
-                BackColor = Color.FromArgb(32, 32, 32),
-                ForeColor = Color.White,
+                BackColor = _bg,
+                ForeColor = _text,
                 Font = new Font("Segoe UI", 9F),
                 OwnerDraw = true,
                 HeaderStyle = ColumnHeaderStyle.None,
                 ShowItemToolTips = true,
-                SmallImageList = new ImageList { ImageSize = new Size(1, 82) }
+                SmallImageList = new ImageList { ImageSize = new Size(1, 68) }
             };
-            profileList.Columns.Add("Ổ", 398);
+            profileList.Columns.Add("Ổ", 308);
             profileList.DrawColumnHeader += (s, e) => e.DrawDefault = false;
             profileList.DrawItem += DrawDriveListItem;
             profileList.DrawSubItem += DrawDriveListSubItem;
@@ -391,12 +389,12 @@ namespace RcloneDriveManager
             };
             leftLayout.Controls.Add(profileList, 0, 1);
 
-            var leftActions = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, Padding = new Padding(0, 6, 0, 0), BackColor = _surface };
+            var leftActions = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, Padding = new Padding(0, 4, 0, 0), BackColor = _bg };
             leftActions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             leftActions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            leftActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-            leftActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-            leftActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            leftActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+            leftActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+            leftActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
             leftActions.Controls.Add(ActionButton("Mới", (s, e) => NewProfile(), _surface, _text, 142), 0, 0);
             leftActions.Controls.Add(ActionButton("Lưu", (s, e) => SaveCurrentProfile(), _primary, Color.White, 142), 1, 0);
             leftActions.Controls.Add(ActionButton("Cài đặt", (s, e) => OpenDriveSettingsDialog(), _surface, _text, 142), 0, 1);
@@ -409,22 +407,20 @@ namespace RcloneDriveManager
             mainTabs = new TabControl
             {
                 Dock = DockStyle.Fill,
-                Font = new Font("Segoe UI", 9.4F, FontStyle.Bold),
-                Padding = new Point(18, 7),
+                Font = new Font("Segoe UI", 9F, FontStyle.Bold),
+                Padding = new Point(14, 6),
                 DrawMode = TabDrawMode.OwnerDrawFixed,
                 SizeMode = TabSizeMode.Fixed,
-                ItemSize = new Size(126, 34)
+                ItemSize = new Size(160, 30)
             };
             mainTabs.DrawItem += DrawMainTab;
             root.Controls.Add(mainTabs, 1, 1);
             mainTabs.TabPages.Add(BuildDriveTab());
-            mainTabs.TabPages.Add(BuildBrowserTab());
-            mainTabs.TabPages.Add(BuildTransferTab());
-            mainTabs.TabPages.Add(BuildAddConfigTab());
-            mainTabs.TabPages.Add(BuildToolsTab());
+            mainTabs.TabPages.Add(BuildBrowseTransferTab());
+            mainTabs.TabPages.Add(BuildConfigToolsTab());
 
-            var logPanel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = Color.FromArgb(15, 23, 42), Padding = new Padding(12) };
-            logPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+            var logPanel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = Color.FromArgb(15, 23, 42), Padding = new Padding(8) };
+            logPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
             logPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             var logHeader = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.FromArgb(15, 23, 42) };
             logHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -443,7 +439,7 @@ namespace RcloneDriveManager
                 ScrollBars = RichTextBoxScrollBars.Vertical,
                 BackColor = Color.FromArgb(15, 23, 42),
                 ForeColor = Color.FromArgb(203, 213, 225),
-                Font = new Font("Consolas", 9.5F),
+                Font = new Font("Consolas", 9F),
                 BorderStyle = BorderStyle.None,
                 WordWrap = true,
                 DetectUrls = false,
@@ -460,8 +456,8 @@ namespace RcloneDriveManager
             if (screen == null)
                 screen = Screen.PrimaryScreen;
             var area = screen.WorkingArea;
-            var targetWidth = Math.Min(1366, Math.Max(MinimumSize.Width, area.Width - 24));
-            var targetHeight = Math.Min(840, Math.Max(MinimumSize.Height, area.Height - 24));
+            var targetWidth = Math.Min(1200, Math.Max(MinimumSize.Width, area.Width - 24));
+            var targetHeight = Math.Min(720, Math.Max(MinimumSize.Height, area.Height - 24));
             if (targetWidth < Width || Width > area.Width)
                 Width = targetWidth;
             if (targetHeight < Height || Height > area.Height)
@@ -472,52 +468,30 @@ namespace RcloneDriveManager
 
         private TabPage BuildDriveTab()
         {
-            var page = new TabPage("Ổ đĩa") { BackColor = _surface, Padding = new Padding(18) };
+            var page = new TabPage("Cấu hình") { BackColor = _surface, Padding = new Padding(14) };
             page.AutoScroll = true;
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, RowCount = 2, ColumnCount = 1, BackColor = _surface };
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 430));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 460));
             page.Controls.Add(pageLayout);
 
-            var actionBar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, BackColor = _surface, Padding = new Padding(0, 4, 0, 8) };
-            actionBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 47));
-            actionBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 53));
-            actionBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
-            actionBar.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
-
-            var connectGroup = CompactButtonGroup("Ổ đĩa");
-            driveConnectButton = ActionButton("Kết nối", async (s, e) => await ToggleSelectedConnectionAsync(), _primary, Color.White, 112);
-            connectGroup.Controls.Add(driveConnectButton);
-            connectGroup.Controls.Add(ActionButton("Ngắt", (s, e) => UnmountSelected(), _surface, _danger, 96));
-            connectGroup.Controls.Add(ActionButton("Mở ổ", (s, e) => OpenSelectedDrive(), _surface, _text, 96));
-            actionBar.Controls.Add(connectGroup, 0, 0);
-
-            var profileGroup = CompactButtonGroup("Profile");
-            profileGroup.Controls.Add(ActionButton("Lưu", (s, e) => SaveCurrentProfile(), _surface, _text, 86));
-            profileGroup.Controls.Add(ActionButton("Cài đặt", (s, e) => OpenDriveSettingsDialog(), _surface, _text, 96));
-            profileGroup.Controls.Add(ActionButton("Code IDE", (s, e) => ApplyCodeIdePreset(), _surface, _text, 104));
-            profileGroup.Controls.Add(ActionButton("Làm mới ổ", async (s, e) => await RefreshSelectedMountAsync(), _surface, _text, 112));
-            actionBar.Controls.Add(profileGroup, 1, 0);
-
-            var toolGroup = CompactButtonGroup("Công cụ");
-            toolGroup.Controls.Add(ActionButton("Web UI", (s, e) => StartWebUi(), _surface, _text, 84));
-            toolGroup.Controls.Add(ActionButton("Cache", (s, e) => BrowseCacheDirForSelectedProfile(), _surface, _text, 78));
-            toolGroup.Controls.Add(ActionButton("Dọn cache", (s, e) => ClearCacheForSelectedProfile(), _surface, _danger, 96));
-            toolGroup.Controls.Add(ActionButton("Tải về máy", async (s, e) => await DownloadRemoteToLocalAsync(), _surface, _text, 98));
-            toolGroup.Controls.Add(ActionButton("Đẩy lên host", async (s, e) => await UploadLocalChangesAsync(), _primary, Color.White, 104));
-            toolGroup.Controls.Add(ActionButton("Mở local", (s, e) => OpenLocalWorkspace(), _surface, _text, 84));
-            toolGroup.Controls.Add(ActionButton("OpenCode", (s, e) => OpenProjectInOpenCode(), _surface, _text, 92));
-            actionBar.Controls.Add(toolGroup, 0, 1);
-            actionBar.SetColumnSpan(toolGroup, 2);
+            var actionBar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, BackColor = _surface, Padding = new Padding(0, 4, 0, 4) };
+            actionBar.Controls.Add(ActionButton("Lưu", (s, e) => SaveCurrentProfile(), _primary, Color.White, 68));
+            actionBar.Controls.Add(ActionButton("Code IDE", (s, e) => ApplyCodeIdePreset(), _surface, _text, 82));
+            actionBar.Controls.Add(ActionButton("Làm mới ổ", async (s, e) => await RefreshSelectedMountAsync(), _surface, _text, 88));
+            actionBar.Controls.Add(ActionButton("Tải về", async (s, e) => await DownloadRemoteToLocalAsync(), _surface, _text, 72));
+            actionBar.Controls.Add(ActionButton("Đẩy lên", async (s, e) => await UploadLocalChangesAsync(), _primary, Color.White, 78));
+            actionBar.Controls.Add(ActionButton("Mở local", (s, e) => OpenLocalWorkspace(), _surface, _text, 78));
+            actionBar.Controls.Add(ActionButton("OpenCode", (s, e) => OpenProjectInOpenCode(), _surface, _text, 84));
             pageLayout.Controls.Add(actionBar, 0, 0);
             var configTabs = new TabControl
             {
                 Dock = DockStyle.Fill,
                 DrawMode = TabDrawMode.OwnerDrawFixed,
                 SizeMode = TabSizeMode.Fixed,
-                ItemSize = new Size(118, 32),
-                Padding = new Point(14, 6),
-                Font = new Font("Segoe UI", 9F, FontStyle.Bold)
+                ItemSize = new Size(100, 28),
+                Padding = new Point(10, 5),
+                Font = new Font("Segoe UI", 8.5F, FontStyle.Bold)
             };
             configTabs.DrawItem += DrawSecondaryTab;
             pageLayout.Controls.Add(configTabs, 0, 1);
@@ -601,7 +575,7 @@ namespace RcloneDriveManager
             panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             for (var i = 0; i < rows; i++)
-                panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 78));
+                panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
             return panel;
         }
 
@@ -743,6 +717,52 @@ namespace RcloneDriveManager
             systemActions.Controls.Add(ActionButton("Startup ON", (s, e) => SetStartup(true), _surface, _text, 112));
             systemActions.Controls.Add(ActionButton("Startup OFF", (s, e) => SetStartup(false), _surface, _danger, 116));
             layout.Controls.Add(systemActions, 0, 4);
+            return page;
+        }
+
+        private TabPage BuildBrowseTransferTab()
+        {
+            var page = new TabPage("Duyệt & Truyền") { BackColor = _surface, Padding = new Padding(4) };
+            var subTabs = new TabControl
+            {
+                Dock = DockStyle.Fill,
+                DrawMode = TabDrawMode.OwnerDrawFixed,
+                SizeMode = TabSizeMode.Fixed,
+                ItemSize = new Size(100, 28),
+                Padding = new Point(10, 5),
+                Font = new Font("Segoe UI", 8.5F, FontStyle.Bold)
+            };
+            subTabs.DrawItem += DrawSecondaryTab;
+            var browserPage = BuildBrowserTab();
+            browserPage.Text = "Duyệt file";
+            subTabs.TabPages.Add(browserPage);
+            var transferPage = BuildTransferTab();
+            transferPage.Text = "Truyền dữ liệu";
+            subTabs.TabPages.Add(transferPage);
+            page.Controls.Add(subTabs);
+            return page;
+        }
+
+        private TabPage BuildConfigToolsTab()
+        {
+            var page = new TabPage("Config & Công cụ") { BackColor = _surface, Padding = new Padding(4) };
+            var subTabs = new TabControl
+            {
+                Dock = DockStyle.Fill,
+                DrawMode = TabDrawMode.OwnerDrawFixed,
+                SizeMode = TabSizeMode.Fixed,
+                ItemSize = new Size(100, 28),
+                Padding = new Point(10, 5),
+                Font = new Font("Segoe UI", 8.5F, FontStyle.Bold)
+            };
+            subTabs.DrawItem += DrawSecondaryTab;
+            var configPage = BuildAddConfigTab();
+            configPage.Text = "Thêm config";
+            subTabs.TabPages.Add(configPage);
+            var toolsPage = BuildToolsTab();
+            toolsPage.Text = "Công cụ";
+            subTabs.TabPages.Add(toolsPage);
+            page.Controls.Add(subTabs);
             return page;
         }
 
@@ -910,18 +930,18 @@ namespace RcloneDriveManager
             {
                 Text = text,
                 Width = width,
-                Height = 34,
-                Margin = new Padding(3, 4, 3, 4),
+                Height = 30,
+                Margin = new Padding(2, 3, 2, 3),
                 BackColor = backColor,
                 ForeColor = foreColor,
                 FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 8.5F, FontStyle.Bold),
+                Font = new Font("Segoe UI", 8F, FontStyle.Bold),
                 Cursor = Cursors.Hand
             };
-            b.FlatAppearance.BorderColor = backColor == _surface ? Color.FromArgb(203, 213, 225) : backColor;
+            b.FlatAppearance.BorderColor = backColor == _surface ? Color.FromArgb(226, 232, 240) : backColor;
             b.FlatAppearance.BorderSize = 1;
-            b.FlatAppearance.MouseOverBackColor = backColor == _surface ? Color.FromArgb(248, 250, 252) : Color.FromArgb(30, 64, 175);
-            b.FlatAppearance.MouseDownBackColor = backColor == _surface ? Color.FromArgb(241, 245, 249) : Color.FromArgb(30, 58, 138);
+            b.FlatAppearance.MouseOverBackColor = backColor == _surface ? Color.FromArgb(241, 245, 249) : Color.FromArgb(29, 78, 216);
+            b.FlatAppearance.MouseDownBackColor = backColor == _surface ? Color.FromArgb(229, 231, 235) : Color.FromArgb(30, 58, 138);
             b.Click += click;
             return b;
         }
@@ -1000,11 +1020,14 @@ namespace RcloneDriveManager
                 }
             }
 
-            var cardColor = selected ? Color.FromArgb(55, 55, 55) : Color.FromArgb(38, 38, 38);
+            var cardColor = selected ? Color.FromArgb(219, 234, 254) : Color.FromArgb(255, 255, 255);
             using (var bg = new SolidBrush(cardColor))
                 g.FillRectangle(bg, bounds);
 
-            var accent = mounted ? _success : Color.FromArgb(148, 163, 184);
+            using (var cardBorder = new Pen(selected ? _primary : Color.FromArgb(226, 232, 240)))
+                g.DrawRectangle(cardBorder, bounds);
+
+            var accent = mounted ? _success : Color.FromArgb(203, 213, 225);
             using (var accentBrush = new SolidBrush(accent))
                 g.FillRectangle(accentBrush, bounds.Left, bounds.Top, 5, bounds.Height);
 
@@ -1017,37 +1040,37 @@ namespace RcloneDriveManager
 
             var driveRect = new Rectangle(bounds.Left + 16, bounds.Top + 16, 28, 18);
             TextRenderer.DrawText(g, IsAutoDrive(drive) ? "A:" : drive, new Font("Segoe UI", 7.6F, FontStyle.Bold),
-                driveRect, Color.White, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                driveRect, selected ? _primary : _text, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
             TextRenderer.DrawText(g, name, new Font("Segoe UI", 9.3F, FontStyle.Bold),
                 new Rectangle(textLeft, bounds.Top + 8, textWidth, 20),
-                Color.White, TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+                _text, TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
 
             TextRenderer.DrawText(g, source, new Font("Segoe UI", 7.5F),
                 new Rectangle(textLeft, bounds.Top + 28, textWidth, 18),
-                Color.FromArgb(150, 150, 150), TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+                _muted, TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
 
             var barRight = compactLayout ? actionLeft - 8 : textLeft + textWidth;
             var barWidth = Math.Max(28, barRight - textLeft);
             var barRect = new Rectangle(textLeft, bounds.Bottom - 18, barWidth, 5);
-            using (var barBack = new SolidBrush(Color.FromArgb(82, 82, 82)))
+            using (var barBack = new SolidBrush(Color.FromArgb(226, 232, 240)))
                 g.FillRectangle(barBack, barRect);
             if (usedRatio.HasValue)
             {
                 var fillWidth = Math.Max(1, Math.Min(barRect.Width, (int)Math.Round(barRect.Width * usedRatio.Value)));
-                using (var barFill = new SolidBrush(Color.FromArgb(150, 150, 150)))
+                using (var barFill = new SolidBrush(_primary))
                     g.FillRectangle(barFill, barRect.Left, barRect.Top, fillWidth, barRect.Height);
             }
 
             TextRenderer.DrawText(g, capacityText, new Font("Segoe UI", 7.8F),
                 new Rectangle(textLeft, bounds.Bottom - 35, barWidth, 16),
-                Color.FromArgb(190, 190, 190),
+                _muted,
                 TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
 
             DrawDriveRowAction(g, actionRects[0], mounted ? DriveRowActionIcon.Disconnect : DriveRowActionIcon.Connect, mounted ? _danger : _success, true);
-            DrawDriveRowAction(g, actionRects[1], DriveRowActionIcon.Settings, Color.FromArgb(120, 120, 120), profile != null);
-            DrawDriveRowAction(g, actionRects[2], DriveRowActionIcon.Folder, Color.FromArgb(120, 120, 120), mounted);
-            DrawDriveRowAction(g, actionRects[3], DriveRowActionIcon.Delete, Color.FromArgb(80, 80, 80), true);
+            DrawDriveRowAction(g, actionRects[1], DriveRowActionIcon.Settings, _muted, profile != null);
+            DrawDriveRowAction(g, actionRects[2], DriveRowActionIcon.Folder, _muted, mounted);
+            DrawDriveRowAction(g, actionRects[3], DriveRowActionIcon.Delete, _danger, true);
         }
 
         private enum DriveRowActionIcon
@@ -1083,8 +1106,17 @@ namespace RcloneDriveManager
             var compact = rect.Width < 30;
             var border = enabled && (icon == DriveRowActionIcon.Connect || icon == DriveRowActionIcon.Disconnect)
                 ? accent
-                : enabled ? Color.FromArgb(145, 145, 145) : Color.FromArgb(85, 85, 85);
-            var iconColor = enabled ? Color.White : Color.FromArgb(115, 115, 115);
+                : enabled ? Color.FromArgb(209, 213, 219) : Color.FromArgb(243, 244, 246);
+            var iconColor = enabled
+                ? (icon == DriveRowActionIcon.Connect || icon == DriveRowActionIcon.Disconnect ? Color.White : Color.FromArgb(75, 85, 99))
+                : Color.FromArgb(156, 163, 175);
+
+            if (enabled && (icon == DriveRowActionIcon.Connect || icon == DriveRowActionIcon.Disconnect))
+            {
+                using (var fillBrush = new SolidBrush(accent))
+                    g.FillEllipse(fillBrush, rect);
+            }
+
             using (var pen = new Pen(border, compact ? 1.6F : 2F))
                 g.DrawEllipse(pen, rect);
             var inner = Rectangle.Inflate(rect, compact ? -8 : -10, compact ? -8 : -10);
@@ -1315,8 +1347,8 @@ namespace RcloneDriveManager
             button.BackColor = back;
             button.ForeColor = Color.White;
             button.FlatAppearance.BorderColor = back;
-            button.FlatAppearance.MouseOverBackColor = back == _danger ? Color.FromArgb(153, 27, 27) : Color.FromArgb(30, 64, 175);
-            button.FlatAppearance.MouseDownBackColor = back == _danger ? Color.FromArgb(127, 29, 29) : Color.FromArgb(30, 58, 138);
+            button.FlatAppearance.MouseOverBackColor = back == _danger ? Color.FromArgb(185, 28, 28) : Color.FromArgb(29, 78, 216);
+            button.FlatAppearance.MouseDownBackColor = back == _danger ? Color.FromArgb(153, 27, 27) : Color.FromArgb(30, 58, 138);
         }
 
         private Button LogButton(string text, EventHandler click, Color foreColor, int width)
@@ -1361,7 +1393,21 @@ namespace RcloneDriveManager
                 if (string.Equals(page.Text, text, StringComparison.OrdinalIgnoreCase))
                 {
                     mainTabs.SelectedTab = page;
-                    break;
+                    return;
+                }
+                foreach (Control child in page.Controls)
+                {
+                    var nested = child as TabControl;
+                    if (nested == null) continue;
+                    foreach (TabPage subPage in nested.TabPages)
+                    {
+                        if (string.Equals(subPage.Text, text, StringComparison.OrdinalIgnoreCase))
+                        {
+                            mainTabs.SelectedTab = page;
+                            nested.SelectedTab = subPage;
+                            return;
+                        }
+                    }
                 }
             }
         }
