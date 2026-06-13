@@ -369,6 +369,7 @@ namespace RcloneDriveManager
             profileList.DrawColumnHeader += (s, e) => e.DrawDefault = false;
             profileList.DrawItem += DrawDriveListItem;
             profileList.DrawSubItem += DrawDriveListSubItem;
+            profileList.MouseClick += async (s, e) => await HandleDriveListMouseClickAsync(e);
             profileList.SelectedIndexChanged += (s, e) =>
             {
                 LoadSelectedProfileIntoFields();
@@ -898,15 +899,19 @@ namespace RcloneDriveManager
             TextRenderer.DrawText(g, IsAutoDrive(drive) ? "A:" : drive, new Font("Segoe UI", 7.6F, FontStyle.Bold),
                 driveRect, Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
+            var actionRects = GetDriveRowActionRects(bounds);
+            var actionLeft = actionRects.Count == 0 ? bounds.Right - 8 : actionRects.Min(r => r.Left);
+            var textWidth = Math.Max(80, actionLeft - (bounds.Left + 88) - 14);
+
             TextRenderer.DrawText(g, name, new Font("Segoe UI", 9.3F, FontStyle.Bold),
-                new Rectangle(bounds.Left + 88, bounds.Top + 8, bounds.Width - 170, 20),
+                new Rectangle(bounds.Left + 88, bounds.Top + 8, textWidth, 20),
                 Color.White, TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
 
             TextRenderer.DrawText(g, source, new Font("Segoe UI", 7.5F),
-                new Rectangle(bounds.Left + 88, bounds.Top + 28, bounds.Width - 170, 18),
+                new Rectangle(bounds.Left + 88, bounds.Top + 28, textWidth, 18),
                 Color.FromArgb(150, 150, 150), TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
 
-            var barRect = new Rectangle(bounds.Left + 88, bounds.Bottom - 15, bounds.Width - 178, 5);
+            var barRect = new Rectangle(bounds.Left + 88, bounds.Bottom - 15, textWidth, 5);
             using (var barBack = new SolidBrush(Color.FromArgb(82, 82, 82)))
                 g.FillRectangle(barBack, barRect);
             if (usedRatio.HasValue)
@@ -917,26 +922,81 @@ namespace RcloneDriveManager
             }
 
             TextRenderer.DrawText(g, capacityText, new Font("Segoe UI", 7.8F),
-                new Rectangle(bounds.Left + 88, bounds.Bottom - 31, bounds.Width - 178, 16),
+                new Rectangle(bounds.Left + 88, bounds.Bottom - 31, textWidth, 16),
                 Color.FromArgb(190, 190, 190),
                 TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
 
-            var stateRect = new Rectangle(bounds.Right - 72, bounds.Top + 16, 44, 24);
-            using (var pill = new SolidBrush(mounted ? Color.FromArgb(22, 101, 52) : Color.FromArgb(75, 85, 99)))
-                g.FillEllipse(pill, new Rectangle(stateRect.Left, stateRect.Top, 24, 24));
-            TextRenderer.DrawText(g, mounted ? "✓" : "○", new Font("Segoe UI", 9F, FontStyle.Bold),
-                new Rectangle(stateRect.Left, stateRect.Top + 1, 24, 22), Color.White,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-
-            TextRenderer.DrawText(g, mounted ? "ON" : "OFF", new Font("Segoe UI", 7.6F, FontStyle.Bold),
-                new Rectangle(stateRect.Left + 26, stateRect.Top + 4, 28, 18),
-                mounted ? Color.FromArgb(190, 255, 210) : Color.FromArgb(180, 180, 180),
-                TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
-
             TextRenderer.DrawText(g, status, new Font("Segoe UI", 7F, FontStyle.Bold),
-                new Rectangle(bounds.Right - 86, bounds.Bottom - 20, 78, 15),
+                new Rectangle(actionLeft, bounds.Bottom - 20, bounds.Right - actionLeft - 6, 15),
                 mounted ? Color.FromArgb(190, 255, 210) : Color.FromArgb(170, 170, 170),
                 TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+
+            DrawDriveRowAction(g, actionRects[0], mounted ? "■" : "▶", mounted ? "Ngắt" : "Kết nối", mounted ? _danger : _success);
+            DrawDriveRowAction(g, actionRects[1], "⚙", "Cài đặt", Color.FromArgb(120, 120, 120));
+            DrawDriveRowAction(g, actionRects[2], "▰", "Mở ổ", Color.FromArgb(120, 120, 120));
+            DrawDriveRowAction(g, actionRects[3], "×", profile != null ? "Xóa" : "Ngắt", Color.FromArgb(80, 80, 80));
+        }
+
+        private List<Rectangle> GetDriveRowActionRects(Rectangle bounds)
+        {
+            var size = 34;
+            var gap = 10;
+            var top = bounds.Top + Math.Max(6, (bounds.Height - size) / 2);
+            var right = bounds.Right - 12;
+            var rects = new List<Rectangle>();
+            for (var i = 0; i < 4; i++)
+            {
+                var left = right - size - i * (size + gap);
+                rects.Insert(0, new Rectangle(left, top, size, size));
+            }
+            return rects;
+        }
+
+        private void DrawDriveRowAction(Graphics g, Rectangle rect, string glyph, string fallback, Color accent)
+        {
+            using (var pen = new Pen(Color.FromArgb(135, 135, 135), 2))
+                g.DrawEllipse(pen, rect);
+            var glyphColor = accent == _danger ? Color.FromArgb(220, 220, 220) : Color.White;
+            TextRenderer.DrawText(g, glyph, new Font("Segoe UI Symbol", 12F, FontStyle.Bold),
+                rect, glyphColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+        }
+
+        private async Task HandleDriveListMouseClickAsync(MouseEventArgs e)
+        {
+            var item = profileList.GetItemAt(e.X, e.Y);
+            if (item == null) return;
+            item.Selected = true;
+            var bounds = item.Bounds;
+            bounds.Inflate(-4, -3);
+            var rects = GetDriveRowActionRects(bounds);
+            var action = rects.FindIndex(r => r.Contains(e.Location));
+            if (action < 0) return;
+
+            if (action == 0)
+            {
+                if (SelectedProfile != null && IsMountedProfile(SelectedProfile))
+                    UnmountSelected();
+                else if (SelectedMountedDrive != null)
+                    UnmountSelected();
+                else
+                    await SaveAndMountCurrentProfileAsync();
+                return;
+            }
+            if (action == 1)
+            {
+                if (SelectedProfile != null) OpenDriveSettingsDialog();
+                return;
+            }
+            if (action == 2)
+            {
+                OpenSelectedDrive();
+                return;
+            }
+            if (action == 3)
+            {
+                if (SelectedProfile != null) DeleteCurrentProfile();
+                else UnmountSelected();
+            }
         }
 
         private string TryGetDriveCapacityText(string drive, out double? usedRatio)
