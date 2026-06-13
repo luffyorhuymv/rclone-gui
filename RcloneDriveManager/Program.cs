@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.6";
+        private const string AppVersion = "1.0.7";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -3077,7 +3077,7 @@ namespace RcloneDriveManager
                 var dName = DialogText(layout, "Tên profile", p.Name, 0, 0);
                 var dRemote = DialogCombo(layout, "Remote", _remotes, p.Remote, 1, 0, true);
                 var dPath = DialogText(layout, "Đường dẫn remote", p.RemotePath, 0, 1);
-                var dDrive = DialogCombo(layout, "Ký tự ổ đĩa", new[] { "Tự chọn ổ trống" }.Concat(GetFreeDriveLetters()).Concat(new[] { p.DriveLetter, "Z:", "Y:", "X:", "W:" }).Distinct(StringComparer.OrdinalIgnoreCase), IsAutoDrive(p.DriveLetter) ? "Tự chọn ổ trống" : p.DriveLetter, 1, 1, true);
+                var dDrive = DialogCombo(layout, "Ký tự ổ đĩa", new[] { "Tự chọn ổ trống" }.Concat(GetFreeDriveLetters(p)).Concat(new[] { p.DriveLetter, "Z:", "Y:", "X:", "W:" }).Distinct(StringComparer.OrdinalIgnoreCase), IsAutoDrive(p.DriveLetter) ? "Tự chọn ổ trống" : p.DriveLetter, 1, 1, true);
                 var dCacheMode = DialogCombo(layout, "Chế độ VFS cache", new[] { "off", "minimal", "writes", "full" }, p.CacheMode, 0, 2, false);
                 var dCacheDir = DialogText(layout, "Thư mục cache", p.CacheDir, 1, 2);
                 var dLocalDir = DialogText(layout, "Thư mục local", NormalizeLocalWorkDir(p), 0, 3);
@@ -3246,9 +3246,10 @@ namespace RcloneDriveManager
         private void RefreshDriveLetters()
         {
             var old = Convert.ToString(driveCombo.SelectedItem ?? driveCombo.Text ?? "");
+            var selectedProfile = SelectedProfile;
             driveCombo.Items.Clear();
             driveCombo.Items.Add("Tự chọn ổ trống");
-            foreach (var d in GetFreeDriveLetters().Concat(new[] { old, "Z:", "Y:", "X:", "W:" }).Where(d => !string.IsNullOrWhiteSpace(d)).Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var d in GetFreeDriveLetters(selectedProfile).Concat(new[] { old, "Z:", "Y:", "X:", "W:" }).Where(d => !string.IsNullOrWhiteSpace(d)).Distinct(StringComparer.OrdinalIgnoreCase))
                 driveCombo.Items.Add(d);
             if (!string.IsNullOrWhiteSpace(old)) SelectComboValue(driveCombo, old);
             if (driveCombo.SelectedIndex < 0 && driveCombo.Items.Count > 0) driveCombo.SelectedIndex = 0;
@@ -3256,9 +3257,37 @@ namespace RcloneDriveManager
 
         private IEnumerable<string> GetFreeDriveLetters()
         {
+            return GetFreeDriveLetters(null);
+        }
+
+        private IEnumerable<string> GetFreeDriveLetters(DriveProfile exceptProfile)
+        {
             var used = DriveInfo.GetDrives().Select(d => d.Name.Substring(0, 2)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var drive in _mounts.Keys)
+            {
+                if (!string.IsNullOrWhiteSpace(drive))
+                    used.Add(NormalizeDriveChoice(drive));
+            }
+            foreach (var drive in GetReservedProfileDriveLetters(exceptProfile))
+                used.Add(drive);
             var letters = "ZYXWVUTSRQPONMLKJIHGFEDC".Select(c => c + ":");
             return letters.Where(d => !used.Contains(d));
+        }
+
+        private IEnumerable<string> GetReservedProfileDriveLetters(DriveProfile exceptProfile)
+        {
+            foreach (var p in _profiles)
+            {
+                if (ReferenceEquals(p, exceptProfile)) continue;
+                if (!IsAutoDrive(p.DriveLetter))
+                    yield return NormalizeDriveChoice(p.DriveLetter);
+            }
+            foreach (var pair in _activeDrives)
+            {
+                if (ReferenceEquals(pair.Key, exceptProfile)) continue;
+                if (!string.IsNullOrWhiteSpace(pair.Value) && !IsAutoDrive(pair.Value))
+                    yield return NormalizeDriveChoice(pair.Value);
+            }
         }
 
         private bool IsAutoDrive(string drive)
@@ -3287,7 +3316,7 @@ namespace RcloneDriveManager
         private string ResolveDriveForMount(DriveProfile profile)
         {
             if (!IsAutoDrive(profile.DriveLetter)) return NormalizeDriveChoice(profile.DriveLetter);
-            var free = GetFreeDriveLetters().FirstOrDefault();
+            var free = GetFreeDriveLetters(profile).FirstOrDefault();
             if (string.IsNullOrWhiteSpace(free))
                 throw new InvalidOperationException("Không tìm thấy ký tự ổ đĩa trống.");
             return free;
@@ -3314,9 +3343,15 @@ namespace RcloneDriveManager
 
         private bool IsDriveAvailableForMount(string drive)
         {
+            return IsDriveAvailableForMount(drive, null);
+        }
+
+        private bool IsDriveAvailableForMount(string drive, DriveProfile exceptProfile)
+        {
             if (string.IsNullOrWhiteSpace(drive) || IsAutoDrive(drive)) return false;
             var normalized = NormalizeDriveChoice(drive);
             if (_mounts.ContainsKey(normalized)) return false;
+            if (GetReservedProfileDriveLetters(exceptProfile).Any(d => string.Equals(d, normalized, StringComparison.OrdinalIgnoreCase))) return false;
             return !DriveInfo.GetDrives().Any(d => string.Equals(d.Name.Substring(0, 2), normalized, StringComparison.OrdinalIgnoreCase));
         }
 
@@ -3847,9 +3882,9 @@ namespace RcloneDriveManager
                 RefreshDriveLetters();
                 return;
             }
-            if (!IsDriveAvailableForMount(mountDrive))
+            if (!IsDriveAvailableForMount(mountDrive, p))
             {
-                AddLog("Ổ " + mountDrive + " đang được Windows sử dụng. Hãy chọn ký tự khác hoặc dùng Tự chọn ổ trống.", "ERROR");
+                AddLog("Ổ " + mountDrive + " đang được Windows hoặc profile khác trong app sử dụng. Hãy chọn ký tự khác hoặc dùng Tự chọn ổ trống.", "ERROR");
                 RefreshDriveLetters();
                 return;
             }
