@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.0";
+        private const string AppVersion = "1.0.1";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -263,6 +263,8 @@ namespace RcloneDriveManager
         private CheckBox configObscurePassBox;
         private CheckBox configRequireInternetBox;
         private Label configCheckLabel;
+        private ToolTip driveActionTip;
+        private string lastDriveActionTipText;
         private bool _loadingProfileFields;
         private bool _profileNameEditedByUser;
         private bool _changingProfileNameAutomatically;
@@ -372,6 +374,15 @@ namespace RcloneDriveManager
             profileList.DrawItem += DrawDriveListItem;
             profileList.DrawSubItem += DrawDriveListSubItem;
             profileList.MouseClick += async (s, e) => await HandleDriveListMouseClickAsync(e);
+            profileList.MouseMove += HandleDriveListMouseMove;
+            profileList.MouseLeave += (s, e) =>
+            {
+                profileList.Cursor = Cursors.Default;
+                lastDriveActionTipText = null;
+                if (driveActionTip != null)
+                    driveActionTip.SetToolTip(profileList, "");
+            };
+            driveActionTip = new ToolTip { AutomaticDelay = 250, ReshowDelay = 80, ShowAlways = true };
             profileList.SelectedIndexChanged += (s, e) =>
             {
                 LoadSelectedProfileIntoFields();
@@ -933,10 +944,19 @@ namespace RcloneDriveManager
                 Color.FromArgb(190, 190, 190),
                 TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
 
-            DrawDriveRowAction(g, actionRects[0], mounted ? "■" : "▶", mounted ? "Ngắt" : "Kết nối", mounted ? _danger : _success);
-            DrawDriveRowAction(g, actionRects[1], "⚙", "Cài đặt", Color.FromArgb(120, 120, 120));
-            DrawDriveRowAction(g, actionRects[2], "▰", "Mở ổ", Color.FromArgb(120, 120, 120));
-            DrawDriveRowAction(g, actionRects[3], "×", profile != null ? "Xóa" : "Ngắt", Color.FromArgb(80, 80, 80));
+            DrawDriveRowAction(g, actionRects[0], mounted ? DriveRowActionIcon.Disconnect : DriveRowActionIcon.Connect, mounted ? _danger : _success, true);
+            DrawDriveRowAction(g, actionRects[1], DriveRowActionIcon.Settings, Color.FromArgb(120, 120, 120), profile != null);
+            DrawDriveRowAction(g, actionRects[2], DriveRowActionIcon.Folder, Color.FromArgb(120, 120, 120), mounted);
+            DrawDriveRowAction(g, actionRects[3], DriveRowActionIcon.Delete, Color.FromArgb(80, 80, 80), true);
+        }
+
+        private enum DriveRowActionIcon
+        {
+            Connect,
+            Disconnect,
+            Settings,
+            Folder,
+            Delete
         }
 
         private List<Rectangle> GetDriveRowActionRects(Rectangle bounds)
@@ -958,14 +978,76 @@ namespace RcloneDriveManager
             return rects;
         }
 
-        private void DrawDriveRowAction(Graphics g, Rectangle rect, string glyph, string fallback, Color accent)
+        private void DrawDriveRowAction(Graphics g, Rectangle rect, DriveRowActionIcon icon, Color accent, bool enabled)
         {
             var compact = rect.Width < 30;
-            using (var pen = new Pen(Color.FromArgb(135, 135, 135), compact ? 1.6F : 2F))
+            var border = enabled ? Color.FromArgb(145, 145, 145) : Color.FromArgb(85, 85, 85);
+            var iconColor = enabled ? Color.White : Color.FromArgb(115, 115, 115);
+            using (var pen = new Pen(border, compact ? 1.6F : 2F))
                 g.DrawEllipse(pen, rect);
-            var glyphColor = accent == _danger ? Color.FromArgb(220, 220, 220) : Color.White;
-            TextRenderer.DrawText(g, glyph, new Font("Segoe UI Symbol", compact ? 9.5F : 12F, FontStyle.Bold),
-                rect, glyphColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+            var inner = Rectangle.Inflate(rect, compact ? -8 : -10, compact ? -8 : -10);
+            if (inner.Width < 8 || inner.Height < 8)
+                inner = Rectangle.Inflate(rect, -7, -7);
+
+            using (var brush = new SolidBrush(iconColor))
+            using (var pen = new Pen(iconColor, compact ? 1.5F : 1.8F))
+            {
+                pen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
+                pen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+                pen.LineJoin = System.Drawing.Drawing2D.LineJoin.Round;
+
+                if (icon == DriveRowActionIcon.Connect)
+                {
+                    var points = new[]
+                    {
+                        new Point(inner.Left + 1, inner.Top),
+                        new Point(inner.Right, inner.Top + inner.Height / 2),
+                        new Point(inner.Left + 1, inner.Bottom)
+                    };
+                    g.FillPolygon(brush, points);
+                }
+                else if (icon == DriveRowActionIcon.Disconnect)
+                {
+                    g.FillRectangle(brush, inner);
+                }
+                else if (icon == DriveRowActionIcon.Settings)
+                {
+                    var cx = rect.Left + rect.Width / 2;
+                    var cy = rect.Top + rect.Height / 2;
+                    var radius = Math.Max(3, inner.Width / 3);
+                    g.DrawEllipse(pen, cx - radius, cy - radius, radius * 2, radius * 2);
+                    for (var i = 0; i < 8; i++)
+                    {
+                        var angle = Math.PI * 2 * i / 8;
+                        var x1 = cx + (int)Math.Round(Math.Cos(angle) * (radius + 2));
+                        var y1 = cy + (int)Math.Round(Math.Sin(angle) * (radius + 2));
+                        var x2 = cx + (int)Math.Round(Math.Cos(angle) * (radius + 5));
+                        var y2 = cy + (int)Math.Round(Math.Sin(angle) * (radius + 5));
+                        g.DrawLine(pen, x1, y1, x2, y2);
+                    }
+                    g.FillEllipse(brush, cx - 1, cy - 1, 3, 3);
+                }
+                else if (icon == DriveRowActionIcon.Folder)
+                {
+                    var folder = new Rectangle(inner.Left - 1, inner.Top + 2, inner.Width + 2, inner.Height - 2);
+                    var tabWidth = Math.Max(5, folder.Width / 3);
+                    var points = new[]
+                    {
+                        new Point(folder.Left, folder.Top + 3),
+                        new Point(folder.Left + tabWidth, folder.Top + 3),
+                        new Point(folder.Left + tabWidth + 3, folder.Top),
+                        new Point(folder.Right, folder.Top),
+                        new Point(folder.Right, folder.Bottom),
+                        new Point(folder.Left, folder.Bottom)
+                    };
+                    g.DrawPolygon(pen, points);
+                }
+                else if (icon == DriveRowActionIcon.Delete)
+                {
+                    g.DrawLine(pen, inner.Left, inner.Top, inner.Right, inner.Bottom);
+                    g.DrawLine(pen, inner.Right, inner.Top, inner.Left, inner.Bottom);
+                }
+            }
         }
 
         private async Task HandleDriveListMouseClickAsync(MouseEventArgs e)
@@ -1030,6 +1112,63 @@ namespace RcloneDriveManager
                     AddLog("Đã gửi lệnh ngắt ổ đang bật sẵn: " + external.DriveLetter);
                     RenderProfiles();
                 }
+            }
+        }
+
+        private void HandleDriveListMouseMove(object sender, MouseEventArgs e)
+        {
+            var hit = GetDriveRowActionHit(e.Location);
+            profileList.Cursor = hit.Action >= 0 ? Cursors.Hand : Cursors.Default;
+            var text = hit.Action >= 0 ? GetDriveRowActionTip(hit.Item, hit.Action) : "";
+            if (text == lastDriveActionTipText)
+                return;
+            lastDriveActionTipText = text;
+            if (driveActionTip != null)
+                driveActionTip.SetToolTip(profileList, text);
+        }
+
+        private DriveRowActionHit GetDriveRowActionHit(Point location)
+        {
+            var item = profileList.GetItemAt(location.X, location.Y);
+            if (item == null)
+                return new DriveRowActionHit(null, -1);
+            var bounds = item.Bounds;
+            bounds.Inflate(-4, -3);
+            var rects = GetDriveRowActionRects(bounds);
+            var action = rects.FindIndex(r => r.Contains(location));
+            return new DriveRowActionHit(item, action);
+        }
+
+        private string GetDriveRowActionTip(ListViewItem item, int action)
+        {
+            if (item == null || action < 0)
+                return "";
+            var profile = item.Tag as DriveProfile;
+            var external = item.Tag as MountedDriveInfo;
+            if (action == 0)
+            {
+                if (profile != null)
+                    return IsMountedProfile(profile) ? "Ngắt kết nối ổ này" : "Kết nối ổ này";
+                return external != null ? "Ngắt ổ ngoài này" : "";
+            }
+            if (action == 1)
+                return profile != null ? "Cài đặt profile này" : "Ổ ngoài không có cài đặt";
+            if (action == 2)
+                return "Mở ổ trong Explorer";
+            if (action == 3)
+                return profile != null ? "Xóa profile này" : "Ngắt ổ ngoài này";
+            return "";
+        }
+
+        private struct DriveRowActionHit
+        {
+            public readonly ListViewItem Item;
+            public readonly int Action;
+
+            public DriveRowActionHit(ListViewItem item, int action)
+            {
+                Item = item;
+                Action = action;
             }
         }
 
