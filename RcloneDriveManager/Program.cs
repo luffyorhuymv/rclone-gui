@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.9";
+        private const string AppVersion = "1.0.10";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -1015,18 +1015,17 @@ namespace RcloneDriveManager
             var textRight = compactLayout ? bounds.Right - 10 : actionLeft - 10;
             var textWidth = Math.Max(24, textRight - textLeft);
 
-            var iconRect = new Rectangle(bounds.Left + 14, bounds.Top + 12, 28, 34);
-            using (var iconFill = new SolidBrush(Color.FromArgb(46, 46, 46)))
-                g.FillRectangle(iconFill, iconRect);
-            using (var iconPen = new Pen(Color.FromArgb(200, 200, 200), 1.2F))
-                g.DrawRectangle(iconPen, iconRect);
-            using (var foldBrush = new SolidBrush(Color.FromArgb(170, 170, 170)))
-                g.FillPolygon(foldBrush, new[]
-                {
-                    new Point(iconRect.Right - 9, iconRect.Top),
-                    new Point(iconRect.Right, iconRect.Top + 9),
-                    new Point(iconRect.Right - 9, iconRect.Top + 9)
-                });
+            var iconRect = new Rectangle(bounds.Left + 20, bounds.Top + 14, 22, 28);
+            using (var iconPen = new Pen(mounted ? Color.FromArgb(230, 230, 230) : Color.FromArgb(185, 185, 185), 1.5F))
+            {
+                g.DrawLine(iconPen, iconRect.Left, iconRect.Top, iconRect.Right - 7, iconRect.Top);
+                g.DrawLine(iconPen, iconRect.Right - 7, iconRect.Top, iconRect.Right, iconRect.Top + 7);
+                g.DrawLine(iconPen, iconRect.Right, iconRect.Top + 7, iconRect.Right, iconRect.Bottom);
+                g.DrawLine(iconPen, iconRect.Right, iconRect.Bottom, iconRect.Left, iconRect.Bottom);
+                g.DrawLine(iconPen, iconRect.Left, iconRect.Bottom, iconRect.Left, iconRect.Top);
+                g.DrawLine(iconPen, iconRect.Right - 7, iconRect.Top, iconRect.Right - 7, iconRect.Top + 7);
+                g.DrawLine(iconPen, iconRect.Right - 7, iconRect.Top + 7, iconRect.Right, iconRect.Top + 7);
+            }
 
             var driveRect = new Rectangle(bounds.Left + 58, bounds.Top + 16, 26, 18);
             using (var pen = new Pen(Color.FromArgb(160, 160, 160)))
