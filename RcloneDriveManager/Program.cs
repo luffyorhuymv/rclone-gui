@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.17";
+        private const string AppVersion = "1.0.18";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -468,7 +468,7 @@ namespace RcloneDriveManager
 
         private TabPage BuildDriveTab()
         {
-            var page = new TabPage("Cấu hình") { BackColor = _surface, Padding = new Padding(14) };
+            var page = new TabPage("Cấu hình") { BackColor = _surface, Padding = new Padding(14), UseVisualStyleBackColor = false };
             page.AutoScroll = true;
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, RowCount = 2, ColumnCount = 1, BackColor = _surface };
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
@@ -558,7 +558,7 @@ namespace RcloneDriveManager
 
         private TabPage ConfigSectionPage(string title)
         {
-            return new TabPage(title) { BackColor = _surface, Padding = new Padding(12, 14, 12, 8) };
+            return new TabPage(title) { BackColor = _surface, Padding = new Padding(12, 14, 12, 8), UseVisualStyleBackColor = false };
         }
 
         private TableLayoutPanel ConfigGrid(int rows)
@@ -586,7 +586,7 @@ namespace RcloneDriveManager
 
         private TabPage BuildBrowserTab()
         {
-            var page = new TabPage("Duyệt file") { BackColor = _surface, Padding = new Padding(12) };
+            var page = new TabPage("Duyệt file") { BackColor = _surface, Padding = new Padding(12), UseVisualStyleBackColor = false };
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _surface };
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -625,7 +625,7 @@ namespace RcloneDriveManager
 
         private TabPage BuildTransferTab()
         {
-            var page = new TabPage("Truyền dữ liệu") { BackColor = _surface, Padding = new Padding(12) };
+            var page = new TabPage("Truyền dữ liệu") { BackColor = _surface, Padding = new Padding(12), UseVisualStyleBackColor = false };
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _surface };
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 180));
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -657,7 +657,7 @@ namespace RcloneDriveManager
 
         private TabPage BuildToolsTab()
         {
-            var page = new TabPage("Công cụ") { BackColor = _surface, Padding = new Padding(22) };
+            var page = new TabPage("Công cụ") { BackColor = _surface, Padding = new Padding(22), UseVisualStyleBackColor = false };
             page.AutoScroll = true;
             var layout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, RowCount = 5, ColumnCount = 1, BackColor = _surface };
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -710,7 +710,7 @@ namespace RcloneDriveManager
 
         private TabPage BuildBrowseTransferTab()
         {
-            var page = new TabPage("Duyệt & Truyền") { BackColor = _surface, Padding = new Padding(4) };
+            var page = new TabPage("Duyệt & Truyền") { BackColor = _surface, Padding = new Padding(4), UseVisualStyleBackColor = false };
             var subTabs = new TabControl
             {
                 Dock = DockStyle.Fill,
@@ -733,7 +733,7 @@ namespace RcloneDriveManager
 
         private TabPage BuildConfigToolsTab()
         {
-            var page = new TabPage("Config & Công cụ") { BackColor = _surface, Padding = new Padding(4) };
+            var page = new TabPage("Config & Công cụ") { BackColor = _surface, Padding = new Padding(4), UseVisualStyleBackColor = false };
             var subTabs = new TabControl
             {
                 Dock = DockStyle.Fill,
@@ -808,7 +808,7 @@ namespace RcloneDriveManager
 
         private TabPage BuildAddConfigTab()
         {
-            var page = new TabPage("Thêm config") { BackColor = _surface, Padding = new Padding(12) };
+            var page = new TabPage("Thêm config") { BackColor = _surface, Padding = new Padding(12), UseVisualStyleBackColor = false };
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, BackColor = _surface };
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 352));
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
@@ -1027,19 +1027,24 @@ namespace RcloneDriveManager
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 
             var parentBgColor = tabs.Parent?.BackColor ?? Color.FromArgb(240, 240, 243);
+            
+            // Inflate fill bounds slightly to overwrite OS-drawn tab outlines/borders
+            var fillRect = bounds;
+            fillRect.Inflate(3, 3);
+            
             using (var clearBrush = new SolidBrush(parentBgColor))
-                g.FillRectangle(clearBrush, bounds);
+                g.FillRectangle(clearBrush, fillRect);
 
             using (var borderPen = new Pen(_line, 1F))
             {
-                g.DrawLine(borderPen, bounds.Left, bounds.Bottom - 1, bounds.Right, bounds.Bottom - 1);
+                g.DrawLine(borderPen, bounds.Left - 4, bounds.Bottom - 1, bounds.Right + 4, bounds.Bottom - 1);
             }
 
             if (selected)
             {
                 using (var accentBrush = new SolidBrush(_primary))
                 {
-                    g.FillRectangle(accentBrush, bounds.Left + 8, bounds.Bottom - 3, bounds.Width - 16, 3);
+                    g.FillRectangle(accentBrush, bounds.Left + 4, bounds.Bottom - 3, bounds.Width - 8, 3);
                 }
             }
 
