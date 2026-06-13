@@ -453,7 +453,7 @@ namespace RcloneDriveManager
             checks.Controls.Add(readOnlyBox);
             checks.Controls.Add(autoMountBox);
             checks.Controls.Add(networkModeBox);
-            tunnelEnabledBox = new CheckBox { Text = "Cloudflare tunnel", Width = 170 };
+            tunnelEnabledBox = new CheckBox { Text = "Mount Cloudflare tunnel", Width = 210 };
             checks.Controls.Add(tunnelEnabledBox);
             pageLayout.Controls.Add(checks, 0, 1);
 
@@ -493,7 +493,7 @@ namespace RcloneDriveManager
             cacheMaxAgeBox = AddText(panel, "Giữ cache tối đa", "72h", 1, 4);
             writeBackBox = AddText(panel, "Upload sau khi sửa", "5s", 0, 5);
             tunnelHostnameBox = AddText(panel, "CF Access hostname", "", 1, 5);
-            tunnelPortBox = AddNumber(panel, "Tunnel local port", 2221, 1, 65535, 0, 6);
+            tunnelPortBox = AddNumber(panel, "Tunnel local port (0 = tự chọn)", 2221, 0, 65535, 0, 6);
             tunnelCommandBox = new TextBox { Text = "", Height = 54, Multiline = true, ScrollBars = ScrollBars.Vertical };
             panel.Controls.Add(Wrap("Lệnh tunnel tùy chỉnh", tunnelCommandBox), 1, 6);
             extraArgsBox = new TextBox { Text = "", Height = 54, Multiline = true, ScrollBars = ScrollBars.Vertical };
@@ -2906,6 +2906,11 @@ namespace RcloneDriveManager
 
         private async Task<bool> EnsureProfileTunnelAsync(DriveProfile p)
         {
+            if (p != null && p.TunnelEnabled && string.IsNullOrWhiteSpace(p.TunnelCommand) && string.IsNullOrWhiteSpace(p.TunnelHostname))
+            {
+                AddLog("Da tick Mount Cloudflare tunnel nhung chua nhap CF Access hostname.", "ERROR");
+                return false;
+            }
             var command = BuildTunnelCommand(p);
             if (string.IsNullOrWhiteSpace(command)) return true;
 
@@ -2992,9 +2997,33 @@ namespace RcloneDriveManager
             if (!p.TunnelEnabled) return "";
             var hostname = (p.TunnelHostname ?? "").Trim();
             if (string.IsNullOrWhiteSpace(hostname)) return "";
-            var port = p.TunnelLocalPort <= 0 ? 2221 : p.TunnelLocalPort;
+            var port = ResolveTunnelLocalPort(p);
             var exe = FindCloudflaredExe();
             return QuoteIfNeeded(exe) + " access tcp --hostname " + QuoteIfNeeded(hostname) + " --url localhost:" + port;
+        }
+
+        private int ResolveTunnelLocalPort(DriveProfile p)
+        {
+            if (p == null) return 2221;
+            if (p.TunnelLocalPort > 0) return p.TunnelLocalPort;
+            for (var port = 2221; port <= 2299; port++)
+            {
+                if (!IsTcpPortOpen("localhost", port, 120))
+                {
+                    p.TunnelLocalPort = port;
+                    try
+                    {
+                        if (tunnelPortBox != null && tunnelPortBox.Minimum <= port && tunnelPortBox.Maximum >= port)
+                            tunnelPortBox.Value = port;
+                    }
+                    catch { }
+                    SaveProfiles();
+                    AddLog("Da tu chon tunnel port: " + port);
+                    return port;
+                }
+            }
+            p.TunnelLocalPort = 2221;
+            return p.TunnelLocalPort;
         }
 
         private async Task<bool> EnsureRcloneRemoteUsesTunnelAsync(DriveProfile p)
