@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.5";
+        private const string AppVersion = "1.0.6";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -858,6 +858,7 @@ namespace RcloneDriveManager
             var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(0, 12, 0, 0), BackColor = _surface };
             actions.Controls.Add(ActionButton("Kiểm tra kết nối", async (s, e) => await CheckConfigConnectionAsync(true), _surface, _text, 162));
             actions.Controls.Add(ActionButton("Thêm config", async (s, e) => await AddConfigFromUiAsync(), _primary, Color.White, 132));
+            actions.Controls.Add(ActionButton("Lưu config", async (s, e) => await SaveConfigFromUiAsync(), _surface, _text, 124));
             actions.Controls.Add(ActionButton("Xem config", (s, e) => ShowConfigFromUi(), _surface, _text, 118));
             actions.Controls.Add(ActionButton("Xóa config", async (s, e) => await DeleteConfigFromUiAsync(), _surface, _danger, 118));
             actions.Controls.Add(ActionButton("Mở wizard", (s, e) => OpenConfig(), _surface, _text, 112));
@@ -4879,7 +4880,7 @@ namespace RcloneDriveManager
 
         private async Task<bool> CheckConfigConnectionAsync(bool showMessage)
         {
-            var name = (configNameBox.Text ?? "").Trim();
+            var name = GetConfigNameFromUiOrSelection();
             var type = Convert.ToString(configTypeCombo.SelectedItem ?? "").Trim();
             configCheckLabel.Text = "Checking...";
 
@@ -4895,10 +4896,21 @@ namespace RcloneDriveManager
                 AddLog("Remote name must use letters, numbers, dash, underscore or dot only.", "ERROR");
                 return false;
             }
-            if (_remotes.Any(r => string.Equals(r.TrimEnd(':'), name, StringComparison.OrdinalIgnoreCase)))
+            if (RemoteExists(name))
             {
-                configCheckLabel.Text = "Remote already exists";
-                AddLog("Remote already exists: " + name + ":", "ERROR");
+                var testPath = DriveProfile.NormalizeRemotePath(configTestPathBox.Text, name + ":");
+                AddLog("Kiểm tra config đã có: " + name + ":" + testPath);
+                var result = await RunRcloneResultAsync(20000, "rclone lsd " + name + ":" + testPath, "lsd", name + ":" + testPath);
+                if (result.ExitCode != 0)
+                    result = await RunRcloneResultAsync(20000, "rclone lsf " + name + ":" + testPath + " --max-depth 1", "lsf", name + ":" + testPath, "--max-depth", "1");
+                if (result.ExitCode == 0)
+                {
+                    configCheckLabel.Text = "Config OK";
+                    if (showMessage) AddLog("Config kết nối OK: " + name + ":");
+                    return true;
+                }
+                configCheckLabel.Text = "Config lỗi";
+                AddLog("Config chưa kết nối được: " + name + ": " + result.Output, "ERROR");
                 return false;
             }
             if (string.IsNullOrWhiteSpace(type))
@@ -4933,22 +4945,26 @@ namespace RcloneDriveManager
             return true;
         }
 
+        private bool RemoteExists(string name)
+        {
+            name = (name ?? "").Trim().TrimEnd(':');
+            return _remotes.Any(r => string.Equals(r.TrimEnd(':'), name, StringComparison.OrdinalIgnoreCase));
+        }
+
         private async Task AddConfigFromUiAsync()
         {
-            if (!await CheckConfigConnectionAsync(false)) return;
-
             var name = (configNameBox.Text ?? "").Trim();
             var type = Convert.ToString(configTypeCombo.SelectedItem ?? "").Trim();
-            var args = new List<string> { "--non-interactive", "config", "create", name, type };
-            var parameters = ParseConfigParameters();
-            if (!string.IsNullOrWhiteSpace(configUserBox.Text))
-                parameters["user"] = configUserBox.Text.Trim();
-            if (!string.IsNullOrEmpty(configPassBox.Text))
+            if (RemoteExists(name))
             {
-                parameters["pass"] = configObscurePassBox.Checked
-                    ? await ObscurePasswordAsync(configPassBox.Text)
-                    : configPassBox.Text;
+                configCheckLabel.Text = "Remote already exists";
+                AddLog("Remote đã tồn tại. Dùng Lưu config để cập nhật: " + name + ":", "ERROR");
+                return;
             }
+            if (!await CheckConfigConnectionAsync(false)) return;
+
+            var args = new List<string> { "--non-interactive", "config", "create", name, type };
+            var parameters = await BuildConfigParametersFromUiAsync();
 
             foreach (var pair in parameters)
             {
@@ -4996,6 +5012,101 @@ namespace RcloneDriveManager
             RenderProfiles();
             SelectProfile(profile);
             AddLog("Added config and profile: " + name + ":");
+        }
+
+        private async Task SaveConfigFromUiAsync()
+        {
+            var name = (configNameBox.Text ?? "").Trim();
+            var type = Convert.ToString(configTypeCombo.SelectedItem ?? "").Trim();
+            if (!IsValidRemoteName(name))
+            {
+                configCheckLabel.Text = "Invalid remote name";
+                AddLog("Remote name must use letters, numbers, dash, underscore or dot only.", "ERROR");
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(type))
+            {
+                configCheckLabel.Text = "Missing type";
+                AddLog("Select a storage type first.", "ERROR");
+                return;
+            }
+
+            var exists = RemoteExists(name);
+            var parameters = await BuildConfigParametersFromUiAsync();
+            if (exists)
+                parameters["type"] = type;
+            var args = new List<string> { "--non-interactive", "config", exists ? "update" : "create", name };
+            if (!exists)
+                args.Add(type);
+            foreach (var pair in parameters)
+            {
+                if (!string.IsNullOrWhiteSpace(pair.Value))
+                {
+                    args.Add(pair.Key);
+                    args.Add(pair.Value);
+                }
+            }
+
+            AddLog((exists ? "Updating config " : "Creating config ") + name + ": type " + type);
+            var safe = "rclone --non-interactive config " + (exists ? "update " : "create ") + name + (exists ? "" : " " + type) + " ... pass=<ẩn>";
+            var output = await RunCaptureSensitiveAsync(args.ToArray(), safe);
+            await RefreshRemotesAsync();
+
+            if (!RemoteExists(name))
+            {
+                configCheckLabel.Text = "Save failed";
+                AddLog("Không lưu được config. rclone output: " + output, "ERROR");
+                return;
+            }
+
+            EnsureProfileForConfig(name);
+            configCheckLabel.Text = exists ? "Saved" : "Created";
+            AddLog("Đã lưu config: " + name + ":");
+            await CheckConfigConnectionAsync(false);
+        }
+
+        private async Task<Dictionary<string, string>> BuildConfigParametersFromUiAsync()
+        {
+            var parameters = ParseConfigParameters();
+            if (!string.IsNullOrWhiteSpace(configUserBox.Text))
+                parameters["user"] = configUserBox.Text.Trim();
+            if (!string.IsNullOrEmpty(configPassBox.Text))
+            {
+                parameters["pass"] = configObscurePassBox.Checked
+                    ? await ObscurePasswordAsync(configPassBox.Text)
+                    : configPassBox.Text;
+            }
+            return parameters;
+        }
+
+        private void EnsureProfileForConfig(string name)
+        {
+            var remote = name.TrimEnd(':') + ":";
+            var profile = _profiles.FirstOrDefault(p => string.Equals((p.Remote ?? "").Trim(), remote, StringComparison.OrdinalIgnoreCase));
+            var testPath = DriveProfile.NormalizeRemotePath(configTestPathBox.Text, remote);
+            if (profile == null)
+            {
+                profile = new DriveProfile
+                {
+                    Name = UniqueProfileName(name),
+                    Remote = remote,
+                    DriveLetter = GetFreeDriveLetters().FirstOrDefault() ?? "Z:",
+                    CacheMode = "full",
+                    CacheDir = "%USERPROFILE%\\.cache\\rclone",
+                    LocalWorkDir = GetDefaultLocalWorkDir(name),
+                    VfsCacheMaxAge = "72h",
+                    VfsWriteBack = "5s",
+                    NetworkMode = true,
+                    Transfers = 4,
+                    BufferSizeMb = 32,
+                    MountPreset = "Nhanh/RaiDrive"
+                };
+                _profiles.Add(profile);
+            }
+            profile.RemotePath = testPath;
+            SaveProfiles();
+            RenderProfiles();
+            SelectProfile(profile);
         }
 
         private Dictionary<string, string> ParseConfigParameters()
