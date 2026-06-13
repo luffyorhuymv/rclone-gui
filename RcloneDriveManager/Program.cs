@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.13";
+        private const string AppVersion = "1.0.14";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -212,7 +212,7 @@ namespace RcloneDriveManager
         private readonly Dictionary<string, MountedDriveInfo> _detectedRcloneDrives = new Dictionary<string, MountedDriveInfo>(StringComparer.OrdinalIgnoreCase);
         private Process _webUiProcess;
         private readonly Color _bg = Color.FromArgb(248, 250, 252);
-        private readonly Color _surface = Color.White;
+        private readonly Color _surface = Color.FromArgb(245, 245, 247);
         private readonly Color _line = Color.FromArgb(229, 231, 235);
         private readonly Color _text = Color.FromArgb(25, 28, 29);
         private readonly Color _muted = Color.FromArgb(66, 71, 84);
@@ -426,7 +426,7 @@ namespace RcloneDriveManager
             logHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             logHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240));
             logHeader.Controls.Add(new Label { Text = "Log rclone", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(226, 232, 240), Font = new Font("Segoe UI", 10F, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
-            var logActions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, BackColor = Color.FromArgb(15, 23, 42), Padding = new Padding(0, 3, 0, 0) };
+            var logActions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, BackColor = Color.FromArgb(15, 23, 42), Padding = new Padding(0, 3, 8, 0) };
             logActions.Controls.Add(LogButton("Xóa log", (s, e) => ClearLog(), _danger, 68));
             logActions.Controls.Add(LogButton("Copy", (s, e) => CopyLog(), _text, 56));
             logActions.Controls.Add(LogButton("Lỗi", (s, e) => ShowErrorLog(), _text, 48));
@@ -581,22 +581,7 @@ namespace RcloneDriveManager
 
         private void DrawSecondaryTab(object sender, DrawItemEventArgs e)
         {
-            var tabs = sender as TabControl;
-            if (tabs == null) return;
-            var selected = e.Index == tabs.SelectedIndex;
-            var bounds = e.Bounds;
-            bounds.Inflate(-2, -2);
-            using (var bg = new SolidBrush(selected ? Color.FromArgb(239, 246, 255) : Color.FromArgb(248, 250, 252)))
-                e.Graphics.FillRectangle(bg, bounds);
-            using (var border = new Pen(selected ? _primary : _line))
-                e.Graphics.DrawRectangle(border, bounds);
-            TextRenderer.DrawText(
-                e.Graphics,
-                tabs.TabPages[e.Index].Text,
-                tabs.Font,
-                bounds,
-                selected ? _primary : _muted,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            DrawTabHeader(sender as TabControl, e, false);
         }
 
         private TabPage BuildBrowserTab()
@@ -952,36 +937,49 @@ namespace RcloneDriveManager
 
         private void DrawMainTab(object sender, DrawItemEventArgs e)
         {
-            var selected = e.Index == mainTabs.SelectedIndex;
+            DrawTabHeader(sender as TabControl, e, true);
+        }
+
+        private void DrawTabHeader(TabControl tabs, DrawItemEventArgs e, bool isMain)
+        {
+            if (tabs == null) return;
+            var selected = e.Index == tabs.SelectedIndex;
             var bounds = e.Bounds;
 
             e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            using (var clearBrush = new SolidBrush(Color.FromArgb(248, 250, 252)))
+
+            var parentBgColor = tabs.Parent?.BackColor ?? Color.FromArgb(248, 250, 252);
+            using (var clearBrush = new SolidBrush(parentBgColor))
                 e.Graphics.FillRectangle(clearBrush, bounds);
 
             bounds.Inflate(-1, -1);
             if (bounds.Width <= 12 || bounds.Height <= 12) return;
 
-            using (var path = GetTabPath(bounds, 6))
+            if (selected)
+                bounds.Height += 2;
+
+            using (var path = GetTabPath(bounds, 5, selected))
             {
-                var bgClr = selected ? _surface : Color.FromArgb(241, 245, 249);
+                Color bgClr = selected ? _surface : (isMain ? Color.FromArgb(241, 245, 249) : Color.FromArgb(243, 244, 246));
                 using (var bg = new SolidBrush(bgClr))
                     e.Graphics.FillPath(bg, path);
 
-                using (var border = new Pen(selected ? _primary : _line, 1.2F))
+                var borderPenColor = selected ? _primary : _line;
+                using (var border = new Pen(borderPenColor, 1.2F))
                     e.Graphics.DrawPath(border, path);
             }
 
+            var foreClr = selected ? _primary : _muted;
             TextRenderer.DrawText(
                 e.Graphics,
-                mainTabs.TabPages[e.Index].Text,
-                mainTabs.Font,
+                tabs.TabPages[e.Index].Text,
+                tabs.Font,
                 bounds,
-                selected ? _primary : _muted,
+                foreClr,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         }
 
-        private System.Drawing.Drawing2D.GraphicsPath GetTabPath(Rectangle rect, float radius)
+        private System.Drawing.Drawing2D.GraphicsPath GetTabPath(Rectangle rect, float radius, bool selected)
         {
             var path = new System.Drawing.Drawing2D.GraphicsPath();
             float r2 = radius * 2f;
@@ -991,8 +989,11 @@ namespace RcloneDriveManager
             path.AddLine(rect.X + radius, rect.Y, rect.Right - radius, rect.Y);
             path.AddArc(rect.Right - r2, rect.Y, r2, r2, 270, 90);
             path.AddLine(rect.Right, rect.Y + radius, rect.Right, rect.Bottom);
-            path.AddLine(rect.Right, rect.Bottom, rect.X, rect.Bottom);
-            path.CloseFigure();
+            if (!selected)
+            {
+                path.AddLine(rect.Right, rect.Bottom, rect.X, rect.Bottom);
+                path.CloseFigure();
+            }
             return path;
         }
 
