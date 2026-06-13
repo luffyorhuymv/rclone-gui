@@ -2166,7 +2166,9 @@ namespace RcloneDriveManager
                 {
                     var item = local[i] as Dictionary<string, object>;
                     var worktree = item != null && item.ContainsKey("worktree") ? Convert.ToString(item["worktree"]) : "";
-                    if (SamePathKey(worktree, projectDir) || SamePathKey(worktree, projectDir.Replace(@"\", @"\\")))
+                    if (SamePathKey(worktree, projectDir) ||
+                        SamePathKey(worktree, projectDir.Replace(@"\", @"\\")) ||
+                        SameMountedProjectPath(worktree, projectDir))
                         local.RemoveAt(i);
                 }
                 local.Insert(0, new Dictionary<string, object> { { "worktree", projectDir }, { "expanded", true } });
@@ -2180,7 +2182,7 @@ namespace RcloneDriveManager
                     var match = sessions
                         .Where(kv => kv.Value is Dictionary<string, object>)
                         .Select(kv => new { Key = kv.Key, Value = (Dictionary<string, object>)kv.Value })
-                        .FirstOrDefault(x => SameProjectLeaf(x.Key, projectDir));
+                        .FirstOrDefault(x => SameMountedProjectPath(x.Key, projectDir));
                     if (match != null)
                     {
                         var copied = new Dictionary<string, object>(match.Value);
@@ -2269,6 +2271,62 @@ namespace RcloneDriveManager
                    l.EndsWith("\\" + fileName, StringComparison.OrdinalIgnoreCase);
         }
 
+        private bool IsMountedStylePath(string path)
+        {
+            path = (path ?? "").Trim();
+            return path.StartsWith(@"\\", StringComparison.Ordinal) ||
+                   Regex.IsMatch(path, @"^[A-Za-z]:\\", RegexOptions.IgnoreCase);
+        }
+
+        private bool SameMountedProjectPath(string left, string right)
+        {
+            if (!IsMountedStylePath(left) || !IsMountedStylePath(right)) return false;
+            var leftDrive = MountedDriveHint(left);
+            var rightDrive = MountedDriveHint(right);
+            if (leftDrive.HasValue && rightDrive.HasValue &&
+                char.ToUpperInvariant(leftDrive.Value) != char.ToUpperInvariant(rightDrive.Value))
+                return false;
+
+            var leftRel = MountedRelativePath(left);
+            var rightRel = MountedRelativePath(right);
+            return !string.IsNullOrWhiteSpace(leftRel) &&
+                   !string.IsNullOrWhiteSpace(rightRel) &&
+                   string.Equals(leftRel, rightRel, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private char? MountedDriveHint(string path)
+        {
+            path = (path ?? "").Replace('/', '\\').Trim();
+            var drive = Regex.Match(path, @"^([A-Za-z]):\\");
+            if (drive.Success) return drive.Groups[1].Value[0];
+
+            if (path.StartsWith(@"\\", StringComparison.Ordinal))
+            {
+                var parts = path.Trim('\\').Split(new[] { '\\' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 2)
+                {
+                    var shareMatch = Regex.Match(parts[1], @"\b([A-Za-z])$");
+                    if (shareMatch.Success) return shareMatch.Groups[1].Value[0];
+                }
+            }
+            return null;
+        }
+
+        private string MountedRelativePath(string path)
+        {
+            path = (path ?? "").Replace('/', '\\').Trim().TrimEnd('\\');
+            if (Regex.IsMatch(path, @"^[A-Za-z]:\\", RegexOptions.IgnoreCase))
+                return path.Length > 3 ? path.Substring(3).TrimStart('\\') : "";
+
+            if (path.StartsWith(@"\\", StringComparison.Ordinal))
+            {
+                var parts = path.Trim('\\').Split(new[] { '\\' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length > 2)
+                    return string.Join("\\", parts.Skip(2).ToArray());
+            }
+            return "";
+        }
+
         private string FindOpenCodeExe()
         {
             var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -2283,12 +2341,9 @@ namespace RcloneDriveManager
         private string OpenCodeProjectRootForProfile(DriveProfile p, string drive)
         {
             drive = NormalizeDriveChoice(drive);
-            if (p != null && p.NetworkMode)
-            {
-                var displayRoot = GetDriveDisplayRoot(drive);
-                if (!string.IsNullOrWhiteSpace(displayRoot) && displayRoot.StartsWith(@"\\", StringComparison.Ordinal))
-                    return displayRoot.TrimEnd('\\') + "\\";
-            }
+            var displayRoot = GetDriveDisplayRoot(drive);
+            if (!string.IsNullOrWhiteSpace(displayRoot) && displayRoot.StartsWith(@"\\", StringComparison.Ordinal))
+                return displayRoot.TrimEnd('\\') + "\\";
             return ProjectRootForProfile(p, drive);
         }
 

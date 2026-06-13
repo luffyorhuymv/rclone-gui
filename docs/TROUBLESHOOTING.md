@@ -33,10 +33,9 @@ OpenCode/Codex co the coi day la hai workspace khac nhau.
 
 Cach xu ly:
 
-- OpenCode Desktop thuong on dinh hon khi mo bang ky tu o, vi danh sach project cua OpenCode hay luu dang `X:\public_html`.
-- Dung nut `Mo project` trong app; app se uu tien `X:\...` neu o dang mount.
+- Dung nut `Mo project` trong app; app se uu tien duong dan that phia sau o mount neu lay duoc, vi du `\\server\ten-o X\public_html`.
 - Khong mo xen ke `X:\...` va `\\server\...` cho cung project.
-- Neu da lo mo bang nhieu duong dan, can gan lai session trong state cua OpenCode hoac mo lai dung duong dan da co session.
+- Neu da lo mo bang nhieu duong dan, app se co gang gan lai project/session trong state cua OpenCode ve cung mot duong dan.
 
 ## Codex/OpenCode doc file rat cham
 
