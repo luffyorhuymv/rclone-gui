@@ -21,6 +21,25 @@ Nếu chưa có `rclone.exe` cạnh app, chương trình sẽ hỏi và tự t�
 
 `rclone.exe` không được đưa vào repo này để repo gọn hơn.
 
+## Bản Linux
+
+Bản Linux nằm trong:
+
+```text
+linux/rclone-drive-linux.sh
+```
+
+Chạy trên Linux:
+
+```bash
+chmod +x ./linux/rclone-drive-linux.sh
+./linux/rclone-drive-linux.sh install
+./linux/rclone-drive-linux.sh mount phukientudien:/ ~/mnt/phukientudien
+./linux/rclone-drive-linux.sh opencode ~/mnt/phukientudien public_html
+```
+
+Linux không dùng ký tự ổ như `X:`/`Y:`. Script mount vào thư mục, tự kiểm tra/cài `git`, FUSE, `rclone`, và tự `git init` project nếu OpenCode cần.
+
 ## Source
 
 Source chính nằm tại:

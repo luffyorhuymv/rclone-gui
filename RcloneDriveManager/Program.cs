@@ -1,5 +1,6 @@
 using Microsoft.Win32;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -9,6 +10,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
@@ -61,6 +63,7 @@ namespace RcloneDriveManager
         public int BufferSizeMb { get; set; }
         public string MountPreset { get; set; }
         public string ExtraArgs { get; set; }
+        public string TunnelCommand { get; set; }
 
         public DriveProfile()
         {
@@ -81,6 +84,7 @@ namespace RcloneDriveManager
             BufferSizeMb = 32;
             MountPreset = "Nhanh/RaiDrive";
             ExtraArgs = "";
+            TunnelCommand = "";
         }
 
         public string Source
@@ -193,6 +197,7 @@ namespace RcloneDriveManager
         private readonly JavaScriptSerializer _json = new JavaScriptSerializer();
         private readonly List<DriveProfile> _profiles = new List<DriveProfile>();
         private readonly Dictionary<string, Process> _mounts = new Dictionary<string, Process>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Process> _tunnels = new Dictionary<string, Process>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<DriveProfile, string> _activeDrives = new Dictionary<DriveProfile, string>();
         private readonly List<string> _remotes = new List<string>();
         private readonly List<MountedDriveInfo> _mountedExternalDrives = new List<MountedDriveInfo>();
@@ -428,7 +433,7 @@ namespace RcloneDriveManager
             toolGroup.Controls.Add(ActionButton("Tải về máy", async (s, e) => await DownloadRemoteToLocalAsync(), _surface, _text, 98));
             toolGroup.Controls.Add(ActionButton("Đẩy lên host", async (s, e) => await UploadLocalChangesAsync(), _primary, Color.White, 104));
             toolGroup.Controls.Add(ActionButton("Mở local", (s, e) => OpenLocalWorkspace(), _surface, _text, 84));
-            toolGroup.Controls.Add(ActionButton("Mở project", (s, e) => OpenProjectFolder(), _surface, _text, 96));
+            toolGroup.Controls.Add(ActionButton("OpenCode", (s, e) => OpenProjectInOpenCode(), _surface, _text, 92));
             actionBar.Controls.Add(toolGroup, 0, 2);
             pageLayout.Controls.Add(actionBar, 0, 0);
             var checks = new FlowLayoutPanel { Dock = DockStyle.Fill, Height = 46, Padding = new Padding(0, 6, 0, 4), BackColor = _surface };
@@ -469,7 +474,7 @@ namespace RcloneDriveManager
             transfersBox = AddNumber(panel, "Transfers", 4, 1, 64, 0, 3);
             bufferBox = AddNumber(panel, "Bộ đệm MB", 32, 1, 1024, 1, 3);
             mountPresetCombo = AddCombo(panel, "Preset mount", 0, 4);
-            mountPresetCombo.Items.AddRange(new object[] { "Nhanh/RaiDrive", "Live" });
+            mountPresetCombo.Items.AddRange(new object[] { "Nhanh/RaiDrive", "OpenCode", "Live" });
             mountPresetCombo.SelectedItem = "Nhanh/RaiDrive";
             cacheMaxAgeBox = AddText(panel, "Giữ cache tối đa", "72h", 1, 4);
             writeBackBox = AddText(panel, "Upload sau khi sửa", "5s", 0, 5);
@@ -1756,16 +1761,16 @@ namespace RcloneDriveManager
         private void ApplyCodeIdePreset()
         {
             SelectComboValue(cacheModeCombo, "full");
-            SelectComboValue(mountPresetCombo, "Nhanh/RaiDrive");
-            cacheMaxAgeBox.Text = "72h";
+            SelectComboValue(mountPresetCombo, "OpenCode");
+            cacheMaxAgeBox.Text = "168h";
             writeBackBox.Text = "2s";
             transfersBox.Value = Math.Max(transfersBox.Minimum, Math.Min(transfersBox.Maximum, 1));
-            bufferBox.Value = Math.Max(bufferBox.Minimum, Math.Min(bufferBox.Maximum, 32));
+            bufferBox.Value = Math.Max(bufferBox.Minimum, Math.Min(bufferBox.Maximum, 16));
             networkModeBox.Checked = true;
             readOnlyBox.Checked = false;
 
             SaveCurrentProfile();
-            AddLog("Đã áp dụng preset Code IDE/RaiDrive: cache full, metadata lâu hơn, đọc project nhanh hơn.");
+            AddLog("Đã áp dụng preset OpenCode: cache full, ít kết nối FTP hơn, đọc project ổn định hơn.");
         }
 
         private void NewProfile()
@@ -1925,7 +1930,7 @@ namespace RcloneDriveManager
             var subPath = Prompt.Show("Nhập thư mục con cần mở trên ổ mount:", "Mở thư mục project", "public_html");
             if (string.IsNullOrWhiteSpace(subPath)) return;
             subPath = subPath.Trim().Trim('\\', '/').Replace('/', '\\');
-            var target = ProjectRootForProfile(p, drive);
+            var target = OpenCodeProjectRootForProfile(p, drive);
             if (!string.IsNullOrWhiteSpace(subPath))
                 target = Path.Combine(target, subPath);
             try
@@ -1937,6 +1942,328 @@ namespace RcloneDriveManager
             {
                 AddLog("Không mở được thư mục project: " + ex.Message, "ERROR");
             }
+        }
+
+        private void OpenProjectInOpenCode()
+        {
+            var p = SelectedProfile;
+            if (p == null)
+            {
+                MessageBox.Show("Hãy chọn một profile trước.", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            var drive = ActiveDriveForProfile(p);
+            if (string.IsNullOrWhiteSpace(drive) || !IsMounted(drive))
+            {
+                MessageBox.Show("Ổ này chưa mount. Hãy kết nối trước.", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var subPath = Prompt.Show("Nhập thư mục project cần mở trong OpenCode:", "Mở OpenCode", "public_html");
+            if (string.IsNullOrWhiteSpace(subPath)) return;
+            subPath = subPath.Trim().Trim('\\', '/').Replace('/', '\\');
+            if (string.IsNullOrWhiteSpace(subPath))
+            {
+                MessageBox.Show("Khong mo truc tiep goc o mount. Hay nhap thu muc project cu the, vi du: public_html", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var target = OpenCodeProjectRootForProfile(p, drive);
+            if (!string.IsNullOrWhiteSpace(subPath))
+                target = Path.Combine(target, subPath);
+
+            if (!Directory.Exists(target))
+            {
+                MessageBox.Show("Thư mục project không tồn tại:\r\n" + target, "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            var url = "opencode://new-session?directory=" + Uri.EscapeDataString(target);
+            try
+            {
+                EnsureGitProjectForOpenCode(target);
+                CloseOpenCodeBeforeStateRepair();
+                RepairOpenCodeProjectSession(target);
+                var exe = FindOpenCodeExe();
+                if (!string.IsNullOrWhiteSpace(exe) && File.Exists(exe))
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = exe,
+                        Arguments = QuoteIfNeeded(url),
+                        UseShellExecute = true
+                    });
+                }
+                else
+                {
+                    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                }
+                AddLog("Đã mở OpenCode session cho project: " + target);
+            }
+            catch (Exception ex)
+            {
+                AddLog("Không mở được OpenCode: " + ex.Message, "ERROR");
+                try
+                {
+                    Process.Start(new ProcessStartInfo("explorer.exe", QuoteIfNeeded(target)) { UseShellExecute = true });
+                    AddLog("Đã mở thư mục project bằng Explorer: " + target);
+                }
+                catch { }
+            }
+        }
+
+        private void CloseOpenCodeBeforeStateRepair()
+        {
+            var processes = Process.GetProcessesByName("OpenCode");
+            if (processes.Length == 0) return;
+            AddLog("Đóng OpenCode để sửa session path trước khi mở lại.");
+            foreach (var proc in processes)
+            {
+                try
+                {
+                    if (proc.HasExited) continue;
+                    if (proc.MainWindowHandle != IntPtr.Zero)
+                        proc.CloseMainWindow();
+                }
+                catch { }
+            }
+            var deadline = DateTime.UtcNow.AddSeconds(3);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (Process.GetProcessesByName("OpenCode").Length == 0) return;
+                Thread.Sleep(200);
+            }
+            foreach (var proc in Process.GetProcessesByName("OpenCode"))
+            {
+                try
+                {
+                    if (!proc.HasExited)
+                        proc.Kill();
+                }
+                catch { }
+            }
+            Thread.Sleep(700);
+        }
+
+        private void EnsureGitProjectForOpenCode(string projectDir)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(projectDir) || !Directory.Exists(projectDir)) return;
+                var gitDir = Path.Combine(projectDir, ".git");
+                if (Directory.Exists(gitDir) || File.Exists(gitDir)) return;
+
+                if (!RunGit(projectDir, "init -b main"))
+                {
+                    AddLog("Khong the khoi tao Git cho OpenCode. Hay cai Git for Windows neu may chua co.", "WARN");
+                    return;
+                }
+
+                RunGit(projectDir, "config user.name \"RcloneDrive\"");
+                RunGit(projectDir, "config user.email \"rclonedrive@local\"");
+
+                if (RunGit(projectDir, "commit --allow-empty -m \"Initialize repository\""))
+                    AddLog("Da khoi tao Git cho OpenCode: " + projectDir);
+                else
+                    AddLog("Da git init nhung chua tao duoc commit dau tien: " + projectDir, "WARN");
+            }
+            catch (Exception ex)
+            {
+                AddLog("Khong tu khoi tao duoc Git cho OpenCode: " + ex.Message, "WARN");
+            }
+        }
+
+        private bool RunGit(string workingDir, string arguments)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "git.exe",
+                    Arguments = arguments,
+                    WorkingDirectory = workingDir,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                using (var proc = Process.Start(psi))
+                {
+                    if (proc == null) return false;
+                    var output = proc.StandardOutput.ReadToEnd();
+                    var error = proc.StandardError.ReadToEnd();
+                    if (!proc.WaitForExit(20000))
+                    {
+                        try { proc.Kill(); } catch { }
+                        AddLog("Git timeout: git " + arguments, "WARN");
+                        return false;
+                    }
+                    if (proc.ExitCode != 0)
+                    {
+                        var detail = string.IsNullOrWhiteSpace(error) ? output : error;
+                        AddLog("Git loi: git " + arguments + " | " + detail.Trim(), "WARN");
+                        return false;
+                    }
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLog("Khong chay duoc git.exe: " + ex.Message, "WARN");
+                return false;
+            }
+        }
+
+        private void RepairOpenCodeProjectSession(string projectDir)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(projectDir)) return;
+                projectDir = Path.GetFullPath(projectDir).TrimEnd('\\', '/');
+                var stateFile = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "ai.opencode.desktop",
+                    "opencode.global.dat");
+                if (!File.Exists(stateFile)) return;
+
+                var serializer = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+                var root = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(stateFile, Encoding.UTF8));
+                if (root == null) return;
+
+                var server = ParseJsonObject(serializer, root, "server");
+                var page = ParseJsonObject(serializer, root, "layout.page");
+                if (server == null || page == null) return;
+
+                var projects = GetOrCreateObject(server, "projects");
+                var local = GetOrCreateList(projects, "local");
+                for (var i = local.Count - 1; i >= 0; i--)
+                {
+                    var item = local[i] as Dictionary<string, object>;
+                    var worktree = item != null && item.ContainsKey("worktree") ? Convert.ToString(item["worktree"]) : "";
+                    if (SamePathKey(worktree, projectDir) || SamePathKey(worktree, projectDir.Replace(@"\", @"\\")))
+                        local.RemoveAt(i);
+                }
+                local.Insert(0, new Dictionary<string, object> { { "worktree", projectDir }, { "expanded", true } });
+
+                var lastProject = GetOrCreateObject(server, "lastProject");
+                lastProject["local"] = projectDir;
+
+                var sessions = GetOrCreateObject(page, "lastProjectSession");
+                if (!sessions.ContainsKey(projectDir))
+                {
+                    var match = sessions
+                        .Where(kv => kv.Value is Dictionary<string, object>)
+                        .Select(kv => new { Key = kv.Key, Value = (Dictionary<string, object>)kv.Value })
+                        .FirstOrDefault(x => SameProjectLeaf(x.Key, projectDir));
+                    if (match != null)
+                    {
+                        var copied = new Dictionary<string, object>(match.Value);
+                        copied["directory"] = projectDir;
+                        copied["at"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                        sessions[projectDir] = copied;
+                        sessions.Remove(match.Key);
+                    }
+                }
+
+                root["server"] = serializer.Serialize(server);
+                root["layout.page"] = serializer.Serialize(page);
+                File.Copy(stateFile, stateFile + ".bak-rclone-" + DateTime.Now.ToString("yyyyMMddHHmmss"), true);
+                File.WriteAllText(stateFile, serializer.Serialize(root), new UTF8Encoding(false));
+                AddLog("Đã sửa OpenCode session path: " + projectDir);
+            }
+            catch (Exception ex)
+            {
+                AddLog("Không tự sửa được session OpenCode: " + ex.Message, "WARN");
+            }
+        }
+
+        private Dictionary<string, object> ParseJsonObject(JavaScriptSerializer serializer, Dictionary<string, object> root, string key)
+        {
+            object raw;
+            if (!root.TryGetValue(key, out raw)) return null;
+            return serializer.Deserialize<Dictionary<string, object>>(Convert.ToString(raw) ?? "{}");
+        }
+
+        private Dictionary<string, object> GetOrCreateObject(Dictionary<string, object> parent, string key)
+        {
+            object value;
+            Dictionary<string, object> dict = null;
+            if (parent.TryGetValue(key, out value))
+                dict = value as Dictionary<string, object>;
+            if (dict == null)
+            {
+                dict = new Dictionary<string, object>();
+                parent[key] = dict;
+            }
+            return dict;
+        }
+
+        private List<object> GetOrCreateList(Dictionary<string, object> parent, string key)
+        {
+            object value;
+            if (!parent.TryGetValue(key, out value))
+            {
+                var created = new List<object>();
+                parent[key] = created;
+                return created;
+            }
+            var array = value as object[];
+            if (array != null)
+            {
+                var result = array.ToList();
+                parent[key] = result;
+                return result;
+            }
+            var arrayList = value as ArrayList;
+            if (arrayList != null)
+            {
+                var result = arrayList.Cast<object>().ToList();
+                parent[key] = result;
+                return result;
+            }
+            var existing = value as List<object>;
+            if (existing != null) return existing;
+            existing = new List<object>();
+            parent[key] = existing;
+            return existing;
+        }
+
+        private bool SamePathKey(string left, string right)
+        {
+            return string.Equals((left ?? "").TrimEnd('\\', '/'), (right ?? "").TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool SameProjectLeaf(string left, string right)
+        {
+            var l = (left ?? "").Replace('/', '\\').TrimEnd('\\');
+            var r = (right ?? "").Replace('/', '\\').TrimEnd('\\');
+            if (SamePathKey(l, r)) return true;
+            var fileName = Path.GetFileName(r);
+            return !string.IsNullOrWhiteSpace(fileName) &&
+                   l.EndsWith("\\" + fileName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private string FindOpenCodeExe()
+        {
+            var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var candidates = new[]
+            {
+                Path.Combine(local, "Programs", "@opencode-aidesktop", "OpenCode.exe"),
+                Path.Combine(local, "Programs", "OpenCode", "OpenCode.exe")
+            };
+            return candidates.FirstOrDefault(File.Exists);
+        }
+
+        private string OpenCodeProjectRootForProfile(DriveProfile p, string drive)
+        {
+            drive = NormalizeDriveChoice(drive);
+            if (p != null && p.NetworkMode)
+            {
+                var displayRoot = GetDriveDisplayRoot(drive);
+                if (!string.IsNullOrWhiteSpace(displayRoot) && displayRoot.StartsWith(@"\\", StringComparison.Ordinal))
+                    return displayRoot.TrimEnd('\\') + "\\";
+            }
+            return ProjectRootForProfile(p, drive);
         }
 
         private string ProjectRootForProfile(DriveProfile p, string drive)
@@ -2543,6 +2870,122 @@ namespace RcloneDriveManager
             return GetFreeDriveLetters().FirstOrDefault() ?? "AUTO";
         }
 
+        private async Task<bool> EnsureProfileTunnelAsync(DriveProfile p)
+        {
+            var command = p == null ? "" : (p.TunnelCommand ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(command)) return true;
+
+            string host;
+            int port;
+            var hasEndpoint = TryExtractTunnelEndpoint(command, out host, out port);
+            if (hasEndpoint && IsTcpPortOpen(host, port, 700))
+            {
+                AddLog("Tunnel da san sang: " + host + ":" + port);
+                return true;
+            }
+
+            var key = string.IsNullOrWhiteSpace(p.Id) ? p.Name : p.Id;
+            Process existing;
+            if (_tunnels.TryGetValue(key, out existing) && existing != null && !existing.HasExited)
+            {
+                AddLog("Tunnel dang chay cho profile: " + p.Name);
+            }
+            else
+            {
+                try
+                {
+                    AddLog("[" + p.Name + "] Dang khoi tao ket noi tunnel...");
+                    AddLog("[CMD] [" + p.Name + "] " + command);
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "cmd.exe",
+                        Arguments = "/c " + command,
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true
+                    };
+                    var proc = Process.Start(psi);
+                    if (proc == null)
+                    {
+                        AddLog("Khong start duoc tunnel command.", "ERROR");
+                        return false;
+                    }
+                    proc.EnableRaisingEvents = true;
+                    proc.OutputDataReceived += (s, e) => { if (e.Data != null) AddLog("[" + p.Name + "] " + e.Data, "TUNNEL"); };
+                    proc.ErrorDataReceived += (s, e) => { if (e.Data != null) AddLog("[" + p.Name + "] " + e.Data, "TUNNEL"); };
+                    proc.Exited += (s, e) => AddLog("Tunnel exited for " + p.Name + " code " + SafeExitCode(proc), "WARN");
+                    proc.BeginOutputReadLine();
+                    proc.BeginErrorReadLine();
+                    _tunnels[key] = proc;
+                }
+                catch (Exception ex)
+                {
+                    AddLog("Khong start duoc tunnel: " + ex.Message, "ERROR");
+                    return false;
+                }
+            }
+
+            if (!hasEndpoint)
+            {
+                await Task.Delay(2000);
+                return true;
+            }
+
+            var deadline = DateTime.UtcNow.AddSeconds(15);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (IsTcpPortOpen(host, port, 700))
+                {
+                    AddLog("Tunnel san sang: " + host + ":" + port);
+                    return true;
+                }
+                await Task.Delay(500);
+            }
+
+            AddLog("Tunnel chua mo port " + host + ":" + port + ". Kiem tra cloudflared/login Cloudflare Access.", "ERROR");
+            return false;
+        }
+
+        private int SafeExitCode(Process proc)
+        {
+            try { return proc == null ? -1 : proc.ExitCode; }
+            catch { return -1; }
+        }
+
+        private bool TryExtractTunnelEndpoint(string command, out string host, out int port)
+        {
+            host = "localhost";
+            port = 0;
+            if (string.IsNullOrWhiteSpace(command)) return false;
+            var match = Regex.Match(command, @"--url\s+(?:""(?<url>[^""]+)""|'(?<url>[^']+)'|(?<url>\S+))", RegexOptions.IgnoreCase);
+            if (!match.Success) return false;
+            var url = match.Groups["url"].Value.Trim();
+            url = Regex.Replace(url, @"^[a-z]+://", "", RegexOptions.IgnoreCase);
+            var hostPort = Regex.Match(url, @"^(?<host>\[[^\]]+\]|[^:/]+):(?<port>\d+)");
+            if (!hostPort.Success) return false;
+            host = hostPort.Groups["host"].Value.Trim('[', ']');
+            return int.TryParse(hostPort.Groups["port"].Value, out port) && port > 0;
+        }
+
+        private bool IsTcpPortOpen(string host, int port, int timeoutMs)
+        {
+            try
+            {
+                using (var client = new TcpClient())
+                {
+                    var result = client.BeginConnect(host, port, null, null);
+                    if (!result.AsyncWaitHandle.WaitOne(timeoutMs, false)) return false;
+                    client.EndConnect(result);
+                    return client.Connected;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private async Task MountProfileAsync(DriveProfile p)
         {
             if (string.IsNullOrWhiteSpace(p.Remote))
@@ -2580,6 +3023,9 @@ namespace RcloneDriveManager
                 RefreshDriveLetters();
                 return;
             }
+            if (!await EnsureProfileTunnelAsync(p))
+                return;
+
             var preflight = await TestRemoteBeforeMountAsync(p.Source);
             if (!preflight)
             {
@@ -2679,6 +3125,7 @@ namespace RcloneDriveManager
             args.Add("--transfers");
             args.Add(GetTransferCount(p, remoteType).ToString());
             ApplyRaiDriveLikeArgs(args, p, remoteType);
+            ApplyOpenCodeMountArgs(args, p, remoteType);
             ApplyFtpSafeMountArgs(args, p, remoteType);
             AddExtraArgs(args, p.ExtraArgs);
             args.Add("-v");
@@ -2690,8 +3137,20 @@ namespace RcloneDriveManager
             return string.Equals(p == null ? "" : p.MountPreset, "Live", StringComparison.OrdinalIgnoreCase);
         }
 
+        private bool IsOpenCodePreset(DriveProfile p)
+        {
+            return string.Equals(p == null ? "" : p.MountPreset, "OpenCode", StringComparison.OrdinalIgnoreCase);
+        }
+
         private string GetDirCacheTime(DriveProfile p, string remoteType)
         {
+            if (IsOpenCodePreset(p))
+            {
+                if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
+                    return "30m";
+                return "10m";
+            }
             if (IsLivePreset(p))
             {
                 if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase)) return "10s";
@@ -2706,6 +3165,13 @@ namespace RcloneDriveManager
 
         private string GetAttrTimeout(DriveProfile p, string remoteType)
         {
+            if (IsOpenCodePreset(p))
+            {
+                if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
+                    return "1m";
+                return "30s";
+            }
             if (IsLivePreset(p))
             {
                 if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
@@ -2721,6 +3187,10 @@ namespace RcloneDriveManager
         private int GetBufferSizeMb(DriveProfile p, string remoteType)
         {
             var requested = Math.Max(1, p.BufferSizeMb);
+            if (IsOpenCodePreset(p) &&
+                (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase)))
+                return Math.Min(16, requested);
             if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase))
                 return Math.Min(32, requested);
             if (string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
@@ -2730,6 +3200,7 @@ namespace RcloneDriveManager
 
         private string GetReadAhead(DriveProfile p, string remoteType)
         {
+            if (IsOpenCodePreset(p)) return "4M";
             if (IsLivePreset(p)) return "8M";
             if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
@@ -2740,6 +3211,10 @@ namespace RcloneDriveManager
         private int GetTransferCount(DriveProfile p, string remoteType)
         {
             var requested = Math.Max(1, p.Transfers);
+            if (IsOpenCodePreset(p) &&
+                (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase)))
+                return 1;
             if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase))
                 return 1;
             if (string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
@@ -2758,9 +3233,31 @@ namespace RcloneDriveManager
             {
                 AddArgIfMissing(args, p.ExtraArgs, "--vfs-fast-fingerprint", null);
                 AddArgIfMissing(args, p.ExtraArgs, "--poll-interval", "0");
-                AddArgIfMissing(args, p.ExtraArgs, "--vfs-cache-poll-interval", "5m");
+                if (!IsOpenCodePreset(p))
+                    AddArgIfMissing(args, p.ExtraArgs, "--vfs-cache-poll-interval", "5m");
             }
             AddArgIfMissing(args, p.ExtraArgs, "--daemon-timeout", "15m");
+        }
+
+        private void ApplyOpenCodeMountArgs(List<string> args, DriveProfile p, string remoteType)
+        {
+            if (!IsOpenCodePreset(p)) return;
+
+            AddLog("Áp dụng preset OpenCode: ưu tiên cache metadata/file, giảm tải kết nối khi agent đọc project.");
+            AddArgIfMissing(args, p.ExtraArgs, "--vfs-cache-max-size", "20G");
+            AddArgIfMissing(args, p.ExtraArgs, "--vfs-read-chunk-size", "4M");
+            AddArgIfMissing(args, p.ExtraArgs, "--vfs-read-chunk-size-limit", "64M");
+            AddArgIfMissing(args, p.ExtraArgs, "--vfs-cache-poll-interval", "30s");
+
+            if (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
+            {
+                AddArgIfMissing(args, p.ExtraArgs, "--checkers", "1");
+                AddArgIfMissing(args, p.ExtraArgs, "--retries", "8");
+                AddArgIfMissing(args, p.ExtraArgs, "--low-level-retries", "30");
+                AddArgIfMissing(args, p.ExtraArgs, "--timeout", "3m");
+                AddArgIfMissing(args, p.ExtraArgs, "--contimeout", "20s");
+            }
         }
 
         private void ApplyFtpSafeMountArgs(List<string> args, DriveProfile p, string remoteType)
@@ -2785,6 +3282,7 @@ namespace RcloneDriveManager
 
         private void AddArgIfMissing(List<string> args, string extra, string name, string value)
         {
+            if (args.Any(x => string.Equals(x, name, StringComparison.OrdinalIgnoreCase))) return;
             if (HasExtraArg(extra, name)) return;
             args.Add(name);
             if (!string.IsNullOrWhiteSpace(value))
