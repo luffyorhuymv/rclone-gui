@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.19";
+        private const string AppVersion = "1.0.20";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -211,8 +211,8 @@ namespace RcloneDriveManager
         private readonly List<MountedDriveInfo> _mountedExternalDrives = new List<MountedDriveInfo>();
         private readonly Dictionary<string, MountedDriveInfo> _detectedRcloneDrives = new Dictionary<string, MountedDriveInfo>(StringComparer.OrdinalIgnoreCase);
         private Process _webUiProcess;
-        private readonly Color _bg = Color.FromArgb(240, 240, 243);
-        private readonly Color _surface = Color.FromArgb(243, 243, 246);
+        private readonly Color _bg = Color.FromArgb(243, 244, 246);
+        private readonly Color _surface = Color.FromArgb(248, 249, 250);
         private readonly Color _line = Color.FromArgb(229, 231, 235);
         private readonly Color _text = Color.FromArgb(25, 28, 29);
         private readonly Color _muted = Color.FromArgb(66, 71, 84);
@@ -1026,7 +1026,7 @@ namespace RcloneDriveManager
 
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 
-            var parentBgColor = tabs.Parent?.BackColor ?? Color.FromArgb(240, 240, 243);
+            var parentBgColor = tabs.Parent?.BackColor ?? Color.FromArgb(243, 244, 246);
             
             // Inflate fill bounds slightly to overwrite OS-drawn tab outlines/borders
             var fillRect = bounds;
