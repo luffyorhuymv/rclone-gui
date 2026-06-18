@@ -195,7 +195,7 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.20";
+        private const string AppVersion = "1.0.21";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -420,7 +420,7 @@ namespace RcloneDriveManager
             mainTabs.TabPages.Add(BuildConfigToolsTab());
 
             var logPanel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = Color.FromArgb(15, 23, 42), Padding = new Padding(8) };
-            logPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+            logPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             logPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             var logHeader = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.FromArgb(15, 23, 42) };
             logHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -470,9 +470,9 @@ namespace RcloneDriveManager
         {
             var page = new TabPage("Cấu hình") { BackColor = _surface, Padding = new Padding(14), UseVisualStyleBackColor = false };
             page.AutoScroll = true;
-            var pageLayout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, RowCount = 2, ColumnCount = 1, BackColor = _surface };
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 460));
+            var pageLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _surface };
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             page.Controls.Add(pageLayout);
 
             var actionBar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, BackColor = _surface, Padding = new Padding(0, 4, 0, 4) };
@@ -588,7 +588,7 @@ namespace RcloneDriveManager
         {
             var page = new TabPage("Duyệt file") { BackColor = _surface, Padding = new Padding(12), UseVisualStyleBackColor = false };
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _surface };
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             page.Controls.Add(pageLayout);
 
@@ -3224,10 +3224,13 @@ namespace RcloneDriveManager
                 form.Font = new Font("Segoe UI", 9F);
                 form.BackColor = _surface;
 
+                var contentPanel = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = _surface };
+                form.Controls.Add(contentPanel);
+
                 var layout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Padding = new Padding(14), BackColor = _surface };
                 layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
                 layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-                form.Controls.Add(layout);
+                contentPanel.Controls.Add(layout);
 
                 var dName = DialogText(layout, "Tên profile", p.Name, 0, 0);
                 var dRemote = DialogCombo(layout, "Remote", _remotes, p.Remote, 1, 0, true);
@@ -3247,7 +3250,7 @@ namespace RcloneDriveManager
                     var picked = PickCacheDirectory(dLocalDir.Text);
                     if (!string.IsNullOrWhiteSpace(picked)) dLocalDir.Text = picked;
                 }, _surface, _text, 126));
-                form.Controls.Add(cachePicker);
+                contentPanel.Controls.Add(cachePicker);
                 cachePicker.BringToFront();
                 var dTransfers = DialogNumber(layout, "Transfers", p.Transfers <= 0 ? 4 : p.Transfers, 1, 64, 1, 3);
                 var dBuffer = DialogNumber(layout, "Bộ đệm MB", p.BufferSizeMb <= 0 ? 32 : p.BufferSizeMb, 1, 1024, 0, 4);
@@ -3263,7 +3266,7 @@ namespace RcloneDriveManager
                 checks.Controls.Add(dReadOnly);
                 checks.Controls.Add(dAuto);
                 checks.Controls.Add(dNetwork);
-                form.Controls.Add(checks);
+                contentPanel.Controls.Add(checks);
                 checks.BringToFront();
 
                 var note = new Label
@@ -3274,7 +3277,7 @@ namespace RcloneDriveManager
                     BackColor = _surface,
                     Text = "Cài đặt này áp dụng cho profile đang chọn. Nếu ổ đang mount, hãy Ngắt rồi Kết nối lại để nhận cấu hình mới."
                 };
-                form.Controls.Add(note);
+                contentPanel.Controls.Add(note);
                 note.BringToFront();
 
                 var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 58, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(14, 10, 14, 10), BackColor = _surface };
@@ -3285,6 +3288,7 @@ namespace RcloneDriveManager
                 buttons.Controls.Add(ok);
                 buttons.Controls.Add(cancel);
                 form.Controls.Add(buttons);
+                contentPanel.BringToFront();
                 form.AcceptButton = ok;
                 form.CancelButton = cancel;
 
