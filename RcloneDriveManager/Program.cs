@@ -173,6 +173,13 @@ namespace RcloneDriveManager
         public bool TimedOut { get; set; }
     }
 
+    public sealed class AppUpdateInfo
+    {
+        public string Version { get; set; }
+        public string DownloadUrl { get; set; }
+        public string PageUrl { get; set; }
+    }
+
     public sealed class RcloneFileItem
     {
         public string Path { get; set; }
@@ -211,7 +218,8 @@ namespace RcloneDriveManager
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.22";
+        private const string AppUpdateReleaseApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/releases/latest";
+        private const string AppVersion = "1.0.28";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -226,6 +234,7 @@ namespace RcloneDriveManager
         private readonly List<string> _remotes = new List<string>();
         private readonly List<MountedDriveInfo> _mountedExternalDrives = new List<MountedDriveInfo>();
         private readonly Dictionary<string, MountedDriveInfo> _detectedRcloneDrives = new Dictionary<string, MountedDriveInfo>(StringComparer.OrdinalIgnoreCase);
+        private readonly List<Tuple<string, string, string>> _pendingLogLines = new List<Tuple<string, string, string>>();
         private Process _webUiProcess;
         private readonly Color _bg = Color.FromArgb(243, 244, 246);
         private readonly Color _surface = Color.FromArgb(248, 249, 250);
@@ -279,11 +288,16 @@ namespace RcloneDriveManager
         private CheckBox configObscurePassBox;
         private CheckBox configRequireInternetBox;
         private Label configCheckLabel;
+        private Label liveLogLabel;
         private ToolTip driveActionTip;
         private string lastDriveActionTipText;
         private bool _loadingProfileFields;
         private bool _profileNameEditedByUser;
         private bool _changingProfileNameAutomatically;
+        private bool _connectionBusy;
+        private string _connectionBusyText = "Đang kết nối";
+        private int _connectionBusyStep;
+        private System.Windows.Forms.Timer _connectionBusyTimer;
 
         public MainForm(string[] args)
         {
@@ -329,7 +343,7 @@ namespace RcloneDriveManager
             var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, BackColor = _bg };
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 340));
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             Controls.Add(root);
@@ -435,8 +449,9 @@ namespace RcloneDriveManager
             mainTabs.TabPages.Add(BuildBrowseTransferTab());
             mainTabs.TabPages.Add(BuildConfigToolsTab());
 
-            var logPanel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = Color.FromArgb(15, 23, 42), Padding = new Padding(8) };
+            var logPanel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, BackColor = Color.FromArgb(15, 23, 42), Padding = new Padding(8) };
             logPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            logPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             logPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             var logHeader = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.FromArgb(15, 23, 42) };
             logHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -448,6 +463,18 @@ namespace RcloneDriveManager
             logActions.Controls.Add(LogButton("Lỗi", (s, e) => ShowErrorLog(), _text, 48));
             logHeader.Controls.Add(logActions, 1, 0);
             logPanel.Controls.Add(logHeader, 0, 0);
+            liveLogLabel = new Label
+            {
+                Text = "Log sẵn sàng",
+                Dock = DockStyle.Fill,
+                AutoEllipsis = true,
+                ForeColor = Color.FromArgb(125, 211, 252),
+                BackColor = Color.FromArgb(30, 41, 59),
+                Font = new Font("Segoe UI", 8.5F, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleLeft,
+                Padding = new Padding(8, 0, 8, 0)
+            };
+            logPanel.Controls.Add(liveLogLabel, 0, 1);
             logBox = new RichTextBox
             {
                 Dock = DockStyle.Fill,
@@ -461,9 +488,11 @@ namespace RcloneDriveManager
                 DetectUrls = false,
                 HideSelection = false
             };
-            logPanel.Controls.Add(logBox, 0, 1);
+            logPanel.Controls.Add(logBox, 0, 2);
+            FlushPendingLogs();
             root.Controls.Add(logPanel, 0, 2);
             root.SetColumnSpan(logPanel, 2);
+            AddLog("Log sẵn sàng.");
         }
 
         private void CenterOnActiveScreen()
@@ -492,6 +521,8 @@ namespace RcloneDriveManager
             page.Controls.Add(pageLayout);
 
             var actionBar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, BackColor = _surface, Padding = new Padding(0, 4, 0, 4) };
+            driveConnectButton = ActionButton("Kết nối", async (s, e) => await ToggleSelectedConnectionAsync(), _primary, Color.White, 104);
+            actionBar.Controls.Add(driveConnectButton);
             actionBar.Controls.Add(ActionButton("Lưu", (s, e) => SaveCurrentProfile(), _primary, Color.White, 68));
             actionBar.Controls.Add(ActionButton("Code IDE", (s, e) => ApplyCodeIdePreset(), _surface, _text, 82));
             actionBar.Controls.Add(ActionButton("Làm mới ổ", async (s, e) => await RefreshSelectedMountAsync(), _surface, _text, 88));
@@ -557,6 +588,11 @@ namespace RcloneDriveManager
             writeBackBox = AddText(tunnelPanel, "Upload sau khi sửa", "5s", 0, 0);
             tunnelPortBox = AddNumber(tunnelPanel, "Tunnel local port (0 = tự chọn)", 0, 0, 65535, 1, 0);
             tunnelEnabledBox = new CheckBox { Text = "Mount Cloudflare tunnel", Width = 220, Dock = DockStyle.Fill };
+            tunnelEnabledBox.CheckedChanged += (s, e) =>
+            {
+                if (!_loadingProfileFields)
+                    AddLog("Cloudflare tunnel " + (tunnelEnabledBox.Checked ? "đã bật cho profile/form hiện tại." : "đã tắt cho profile/form hiện tại."), "TUNNEL");
+            };
             tunnelPanel.Controls.Add(Wrap("Cloudflare Access", tunnelEnabledBox), 0, 1);
             tunnelCommandBox = new TextBox { Text = "", Height = 54, Multiline = true, ScrollBars = ScrollBars.Vertical };
             tunnelPanel.Controls.Add(Wrap("Lệnh tunnel tùy chỉnh", tunnelCommandBox), 1, 1);
@@ -1289,6 +1325,11 @@ namespace RcloneDriveManager
 
         private async Task HandleDriveListMouseClickAsync(MouseEventArgs e)
         {
+            if (_connectionBusy)
+            {
+                AddLog("Đang xử lý kết nối/ngắt, vui lòng đợi.", "WARN");
+                return;
+            }
             var item = profileList.GetItemAt(e.X, e.Y);
             if (item == null) return;
             item.Selected = true;
@@ -1305,8 +1346,20 @@ namespace RcloneDriveManager
                 if (profile != null)
                 {
                     SelectProfile(profile);
-                    if (IsMountedProfile(profile)) UnmountSelected();
-                    else await SaveAndMountCurrentProfileAsync();
+                    if (IsMountedProfile(profile))
+                    {
+                        AddLog("Người dùng bấm ngắt trên card: " + profile.Name);
+                        SetConnectionBusy(true, "Đang ngắt");
+                        try { UnmountSelected(); }
+                        finally { SetConnectionBusy(false, ""); }
+                    }
+                    else
+                    {
+                        AddLog("Người dùng bấm kết nối trên card: " + profile.Name);
+                        SetConnectionBusy(true, "Đang kết nối");
+                        try { await SaveAndMountCurrentProfileAsync(); }
+                        finally { SetConnectionBusy(false, ""); }
+                    }
                 }
                 else if (external != null)
                 {
@@ -1433,6 +1486,11 @@ namespace RcloneDriveManager
 
         private void UpdateConnectButtonState()
         {
+            if (_connectionBusy)
+            {
+                UpdateConnectionBusyButtons();
+                return;
+            }
             var profile = SelectedProfile;
             var external = SelectedMountedDrive;
             var mounted = profile != null ? IsMountedProfile(profile) : external != null;
@@ -1452,6 +1510,51 @@ namespace RcloneDriveManager
             button.FlatAppearance.BorderColor = back;
             button.FlatAppearance.MouseOverBackColor = back == _danger ? Color.FromArgb(185, 28, 28) : Color.FromArgb(29, 78, 216);
             button.FlatAppearance.MouseDownBackColor = back == _danger ? Color.FromArgb(153, 27, 27) : Color.FromArgb(30, 58, 138);
+        }
+
+        private void SetConnectionBusy(bool busy, string text)
+        {
+            _connectionBusy = busy;
+            _connectionBusyText = string.IsNullOrWhiteSpace(text) ? "Đang kết nối" : text;
+            _connectionBusyStep = 0;
+
+            if (busy)
+            {
+                if (_connectionBusyTimer == null)
+                {
+                    _connectionBusyTimer = new System.Windows.Forms.Timer { Interval = 450 };
+                    _connectionBusyTimer.Tick += (s, e) =>
+                    {
+                        _connectionBusyStep = (_connectionBusyStep + 1) % 4;
+                        UpdateConnectionBusyButtons();
+                    };
+                }
+                _connectionBusyTimer.Start();
+                UpdateConnectionBusyButtons();
+            }
+            else
+            {
+                if (_connectionBusyTimer != null)
+                    _connectionBusyTimer.Stop();
+                SetConnectButtonEnabled(headerConnectButton, true);
+                SetConnectButtonEnabled(driveConnectButton, true);
+                UpdateConnectButtonState();
+            }
+        }
+
+        private void UpdateConnectionBusyButtons()
+        {
+            var dots = new string('.', _connectionBusyStep);
+            UpdateConnectButton(headerConnectButton, _connectionBusyText + dots, Color.FromArgb(245, 158, 11));
+            UpdateConnectButton(driveConnectButton, _connectionBusyText + dots, Color.FromArgb(245, 158, 11));
+            SetConnectButtonEnabled(headerConnectButton, true);
+            SetConnectButtonEnabled(driveConnectButton, true);
+        }
+
+        private void SetConnectButtonEnabled(Button button, bool enabled)
+        {
+            if (button == null) return;
+            button.Enabled = enabled;
         }
 
         private Button LogButton(string text, EventHandler click, Color foreColor, int width)
@@ -1599,9 +1702,16 @@ namespace RcloneDriveManager
                 return;
             }
             var line = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss") + "  " + level + "  " + message + Environment.NewLine;
+            UpdateStatusLine(message, level);
+            if (logBox == null)
+            {
+                _pendingLogLines.Add(Tuple.Create(line, level, message));
+                return;
+            }
+            FlushPendingLogs();
             AppendColoredLogLine(line, level, message);
             TrimLogLines();
-            logBox.ScrollToCaret();
+            if (logBox != null) logBox.ScrollToCaret();
         }
 
         private void AppendColoredLogLine(string line, string level, string message)
@@ -1615,6 +1725,32 @@ namespace RcloneDriveManager
             logBox.SelectionStart = logBox.TextLength;
         }
 
+        private void FlushPendingLogs()
+        {
+            if (logBox == null || _pendingLogLines.Count == 0) return;
+            foreach (var row in _pendingLogLines.ToList())
+                AppendColoredLogLine(row.Item1, row.Item2, row.Item3);
+            _pendingLogLines.Clear();
+        }
+
+        private void UpdateStatusLine(string message, string level)
+        {
+            var clean = (message ?? "").Replace("\r", " ").Replace("\n", " ").Trim();
+            if (clean.Length > 120) clean = clean.Substring(0, 117) + "...";
+            var labelText = (string.IsNullOrWhiteSpace(level) ? "" : level + "  ") + clean;
+            var color = LogLineColor(level, message);
+            if (statusLabel != null)
+            {
+                statusLabel.Text = labelText;
+                statusLabel.ForeColor = color;
+            }
+            if (liveLogLabel != null)
+            {
+                liveLogLabel.Text = DateTime.Now.ToString("HH:mm:ss") + "  " + labelText;
+                liveLogLabel.ForeColor = color;
+            }
+        }
+
         private Color LogLineColor(string level, string message)
         {
             var text = ((level ?? "") + " " + (message ?? "")).ToUpperInvariant();
@@ -1623,6 +1759,7 @@ namespace RcloneDriveManager
             if (text.Contains("MOUNTED") || text.Contains("REMOTE OK") || text.Contains("ĐÃ") || text.Contains("DA ")) return Color.FromArgb(134, 239, 172);
             if (string.Equals(level, "RCLONE", StringComparison.OrdinalIgnoreCase)) return Color.FromArgb(147, 197, 253);
             if (string.Equals(level, "WEB", StringComparison.OrdinalIgnoreCase)) return Color.FromArgb(196, 181, 253);
+            if (string.Equals(level, "TUNNEL", StringComparison.OrdinalIgnoreCase)) return Color.FromArgb(125, 211, 252);
             return Color.FromArgb(203, 213, 225);
         }
 
@@ -1909,12 +2046,20 @@ namespace RcloneDriveManager
                 var tempRoot = Path.Combine(Path.GetTempPath(), "RcloneDriveManager", "Update-" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(tempRoot);
                 var newExe = Path.Combine(tempRoot, "RcloneDrive.exe");
-                var updateUrl = await GetLatestAppExeUrlAsync();
+                var update = await GetLatestAppUpdateAsync();
+                if (!IsVersionNewer(update.Version, AppVersion))
+                {
+                    TryDeleteDirectory(tempRoot);
+                    var message = "Khong cap nhat: GitHub dang co " + update.Version + ", khong moi hon ban dang chay v" + AppVersion + ".";
+                    AddLog(message, "WARN");
+                    if (manual) MessageBox.Show(message, "Cap nhat", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
                 AddLog("Tải file cập nhật từ GitHub...");
 
                 using (var client = CreateWebClient())
                 {
-                    await client.DownloadFileTaskAsync(new Uri(updateUrl), newExe);
+                    await client.DownloadFileTaskAsync(new Uri(update.DownloadUrl), newExe);
                 }
 
                 if (new FileInfo(newExe).Length < 50000)
@@ -1991,6 +2136,68 @@ namespace RcloneDriveManager
                 AddLog("Commit mới nhất trên GitHub: " + sha.Substring(0, Math.Min(8, sha.Length)));
                 return "https://raw.githubusercontent.com/luffyorhuymv/rclone-gui/" + sha + "/RcloneDrive.exe";
             }
+        }
+
+        private async Task<AppUpdateInfo> GetLatestAppUpdateAsync()
+        {
+            using (var client = CreateWebClient())
+            {
+                var json = await client.DownloadStringTaskAsync(AppUpdateReleaseApiUrl);
+                var data = _json.DeserializeObject(json) as Dictionary<string, object>;
+                if (data == null)
+                    throw new InvalidOperationException("Khong doc duoc thong tin release moi nhat tu GitHub.");
+
+                var tag = GetJsonString(data, "tag_name");
+                if (string.IsNullOrWhiteSpace(tag))
+                    throw new InvalidOperationException("Release moi nhat khong co tag version.");
+
+                var assets = data.ContainsKey("assets") ? data["assets"] as object[] : null;
+                string exeUrl = "";
+                if (assets != null)
+                {
+                    foreach (var item in assets)
+                    {
+                        var asset = item as Dictionary<string, object>;
+                        if (asset == null) continue;
+                        var name = GetJsonString(asset, "name");
+                        if (!string.Equals(name, "RcloneDrive.exe", StringComparison.OrdinalIgnoreCase)) continue;
+                        exeUrl = GetJsonString(asset, "browser_download_url");
+                        if (!string.IsNullOrWhiteSpace(exeUrl)) break;
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(exeUrl))
+                    throw new InvalidOperationException("Release " + tag + " khong co asset RcloneDrive.exe.");
+
+                AddLog("GitHub release moi nhat: " + tag);
+                return new AppUpdateInfo
+                {
+                    Version = NormalizeVersionTag(tag),
+                    DownloadUrl = exeUrl,
+                    PageUrl = GetJsonString(data, "html_url")
+                };
+            }
+        }
+
+        private string GetJsonString(Dictionary<string, object> data, string key)
+        {
+            object value;
+            return data != null && data.TryGetValue(key, out value) ? Convert.ToString(value) : "";
+        }
+
+        private string NormalizeVersionTag(string value)
+        {
+            value = (value ?? "").Trim();
+            return value.StartsWith("v", StringComparison.OrdinalIgnoreCase) ? value.Substring(1) : value;
+        }
+
+        private bool IsVersionNewer(string candidate, string current)
+        {
+            Version candidateVersion;
+            Version currentVersion;
+            if (!Version.TryParse(NormalizeVersionTag(candidate), out candidateVersion)) return false;
+            if (!Version.TryParse(NormalizeVersionTag(current), out currentVersion)) return true;
+            return candidateVersion > currentVersion;
         }
 
         private WebClient CreateWebClient()
@@ -2526,6 +2733,7 @@ namespace RcloneDriveManager
                 TunnelCommand = tunnelCommandBox.Text.Trim(),
                 ExtraArgs = extraArgsBox.Text.Trim()
             };
+            ApplyTunnelDefaultsForNewProfile(p, "Tạo profile mới");
             _profiles.Add(p);
             SaveProfiles();
             RenderProfiles();
@@ -3654,15 +3862,26 @@ namespace RcloneDriveManager
 
         private async Task ToggleSelectedConnectionAsync()
         {
+            if (_connectionBusy)
+            {
+                AddLog("Đang xử lý kết nối/ngắt, vui lòng đợi.", "WARN");
+                return;
+            }
             var profile = SelectedProfile;
             if (profile != null)
             {
                 if (IsMountedProfile(profile))
                 {
-                    UnmountSelected();
+                    AddLog("Người dùng bấm Ngắt kết nối: " + profile.Name);
+                    SetConnectionBusy(true, "Đang ngắt");
+                    try { UnmountSelected(); }
+                    finally { SetConnectionBusy(false, ""); }
                     return;
                 }
-                await SaveAndMountCurrentProfileAsync();
+                AddLog("Người dùng bấm Kết nối: " + profile.Name);
+                SetConnectionBusy(true, "Đang kết nối");
+                try { await SaveAndMountCurrentProfileAsync(); }
+                finally { SetConnectionBusy(false, ""); }
                 return;
             }
 
@@ -3677,6 +3896,7 @@ namespace RcloneDriveManager
 
         private async Task SaveAndMountCurrentProfileAsync()
         {
+            AddLog("Bắt đầu xử lý lệnh kết nối từ UI.");
             var p = SelectedProfile;
             if (p == null)
             {
@@ -3768,6 +3988,7 @@ namespace RcloneDriveManager
                 TunnelCommand = tunnelCommandBox.Text.Trim(),
                 ExtraArgs = extraArgsBox.Text.Trim()
             };
+            ApplyTunnelDefaultsForNewProfile(p, "Tạo profile từ form");
             _profiles.Add(p);
             SaveProfiles();
             RenderProfiles();
@@ -3784,8 +4005,58 @@ namespace RcloneDriveManager
             return GetFreeDriveLetters().FirstOrDefault() ?? "AUTO";
         }
 
+        private void ApplyTunnelDefaultsForNewProfile(DriveProfile profile, string context)
+        {
+            if (profile == null) return;
+            var remote = (profile.Remote ?? "").Trim();
+            var uiEnabled = tunnelEnabledBox != null && tunnelEnabledBox.Checked;
+            var uiCommand = tunnelCommandBox == null ? "" : (tunnelCommandBox.Text ?? "").Trim();
+            var uiPort = tunnelPortBox == null ? 0 : (int)tunnelPortBox.Value;
+
+            if (uiEnabled || !string.IsNullOrWhiteSpace(uiCommand))
+            {
+                profile.TunnelEnabled = uiEnabled;
+                profile.TunnelCommand = uiCommand;
+                profile.TunnelLocalPort = uiPort;
+                AddLog(context + ": đã áp dụng Cloudflare tunnel từ UI cho " + profile.Name + ".", "TUNNEL");
+                return;
+            }
+
+            var sameRemote = _profiles.FirstOrDefault(x =>
+                !ReferenceEquals(x, profile) &&
+                string.Equals((x.Remote ?? "").Trim(), remote, StringComparison.OrdinalIgnoreCase) &&
+                (x.TunnelEnabled || !string.IsNullOrWhiteSpace(x.TunnelCommand) || !string.IsNullOrWhiteSpace(x.TunnelHostname)));
+            if (sameRemote != null)
+            {
+                profile.TunnelEnabled = true;
+                profile.TunnelHostname = sameRemote.TunnelHostname ?? "";
+                profile.TunnelLocalPort = sameRemote.TunnelLocalPort;
+                profile.TunnelCommand = sameRemote.TunnelCommand ?? "";
+                AddLog(context + ": tự bật Cloudflare tunnel theo profile cùng remote " + sameRemote.Name + ".", "TUNNEL");
+                return;
+            }
+
+            var legacyHost = ResolveTunnelHostnameFromLegacyProfile(profile);
+            if (!string.IsNullOrWhiteSpace(legacyHost))
+            {
+                profile.TunnelEnabled = true;
+                profile.TunnelHostname = legacyHost;
+                profile.TunnelLocalPort = uiPort;
+                AddLog(context + ": tự bật Cloudflare tunnel từ profile tunnel cũ: " + legacyHost, "TUNNEL");
+                return;
+            }
+
+            AddLog(context + ": Cloudflare tunnel chưa bật cho profile " + profile.Name + ".", "TUNNEL");
+        }
+
         private async Task<bool> EnsureProfileTunnelAsync(DriveProfile p)
         {
+            if (p == null) return true;
+            if (!p.TunnelEnabled && string.IsNullOrWhiteSpace(p.TunnelCommand))
+            {
+                AddLog("Cloudflare tunnel chưa bật, bỏ qua bước mở tunnel cho " + p.Name + ".", "TUNNEL");
+                return true;
+            }
             if (p != null && p.TunnelEnabled && string.IsNullOrWhiteSpace(p.TunnelCommand))
             {
                 var originalHost = ResolveTunnelHostnameFromRemote(p);
@@ -3797,7 +4068,11 @@ namespace RcloneDriveManager
                 p.TunnelHostname = originalHost;
             }
             var command = BuildTunnelCommand(p);
-            if (string.IsNullOrWhiteSpace(command)) return true;
+            if (string.IsNullOrWhiteSpace(command))
+            {
+                AddLog("Cloudflare tunnel đã bật nhưng chưa tạo được lệnh tunnel cho " + p.Name + ".", "ERROR");
+                return false;
+            }
 
             if (!await EnsureRcloneRemoteUsesTunnelAsync(p))
                 return false;
@@ -4445,7 +4720,6 @@ namespace RcloneDriveManager
             {
                 AddLog("Ổ " + drive + " vẫn còn sau lệnh ngắt. Có thể process rclone đang chạy quyền khác; hãy chạy app cùng quyền với lúc mount.", "ERROR");
             }
-            RefreshExplorer();
             CleanupMountStateForDrive(drive);
             SetDriveIcon(drive, false);
             RefreshDriveLetters();
@@ -4679,6 +4953,11 @@ namespace RcloneDriveManager
             try
             {
                 var root = drive.TrimEnd('\\') + "\\";
+                if (string.IsNullOrWhiteSpace(drive) || !Directory.Exists(root))
+                {
+                    AddLog("Không mở Explorer vì ổ không còn sẵn sàng: " + root, "WARN");
+                    return;
+                }
                 Process.Start(new ProcessStartInfo("explorer.exe", root) { UseShellExecute = true });
                 AddLog("Đã mở Explorer tại " + root);
             }
@@ -5252,6 +5531,7 @@ namespace RcloneDriveManager
                 BufferSizeMb = 32,
                 MountPreset = "Nhanh/RaiDrive"
             };
+            ApplyTunnelDefaultsForNewProfile(profile, "Thêm config");
             _profiles.Add(profile);
             SaveProfiles();
             RenderProfiles();
@@ -5346,6 +5626,7 @@ namespace RcloneDriveManager
                     BufferSizeMb = 32,
                     MountPreset = "Nhanh/RaiDrive"
                 };
+                ApplyTunnelDefaultsForNewProfile(profile, "Lưu config");
                 _profiles.Add(profile);
             }
             profile.RemotePath = testPath;
