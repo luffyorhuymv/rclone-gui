@@ -191,11 +191,27 @@ namespace RcloneDriveManager
         public string Source { get; set; }
         public string VolumeName { get; set; }
     }
+    public sealed class FlatTabControl : TabControl
+    {
+        private struct RECT { public int Left, Top, Right, Bottom; }
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == 0x1328 && !DesignMode) // TCM_ADJUSTRECT
+            {
+                m.Result = (IntPtr)1;
+                var rect = (RECT)m.GetLParam(typeof(RECT));
+                rect.Top += ItemSize.Height + 4;
+                System.Runtime.InteropServices.Marshal.StructureToPtr(rect, m.LParam, true);
+                return;
+            }
+            base.WndProc(ref m);
+        }
+    }
 
     public sealed class MainForm : Form
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
-        private const string AppVersion = "1.0.21";
+        private const string AppVersion = "1.0.22";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -223,7 +239,7 @@ namespace RcloneDriveManager
         private ListView profileList;
         private Button headerConnectButton;
         private Button driveConnectButton;
-        private TabControl mainTabs;
+        private FlatTabControl mainTabs;
         private ComboBox remoteCombo;
         private ComboBox driveCombo;
         private ComboBox cacheModeCombo;
@@ -404,7 +420,7 @@ namespace RcloneDriveManager
             leftActions.SetColumnSpan(statusLabel, 2);
             leftLayout.Controls.Add(leftActions, 0, 2);
 
-            mainTabs = new TabControl
+            mainTabs = new FlatTabControl
             {
                 Dock = DockStyle.Fill,
                 Font = new Font("Segoe UI", 9F, FontStyle.Bold),
@@ -484,7 +500,7 @@ namespace RcloneDriveManager
             actionBar.Controls.Add(ActionButton("Mở local", (s, e) => OpenLocalWorkspace(), _surface, _text, 78));
             actionBar.Controls.Add(ActionButton("OpenCode", (s, e) => OpenProjectInOpenCode(), _surface, _text, 84));
             pageLayout.Controls.Add(actionBar, 0, 0);
-            var configTabs = new TabControl
+            var configTabs = new FlatTabControl
             {
                 Dock = DockStyle.Fill,
                 DrawMode = TabDrawMode.OwnerDrawFixed,
@@ -711,7 +727,7 @@ namespace RcloneDriveManager
         private TabPage BuildBrowseTransferTab()
         {
             var page = new TabPage("Duyệt & Truyền") { BackColor = _surface, Padding = new Padding(4), UseVisualStyleBackColor = false };
-            var subTabs = new TabControl
+            var subTabs = new FlatTabControl
             {
                 Dock = DockStyle.Fill,
                 DrawMode = TabDrawMode.OwnerDrawFixed,
@@ -734,7 +750,7 @@ namespace RcloneDriveManager
         private TabPage BuildConfigToolsTab()
         {
             var page = new TabPage("Config & Công cụ") { BackColor = _surface, Padding = new Padding(4), UseVisualStyleBackColor = false };
-            var subTabs = new TabControl
+            var subTabs = new FlatTabControl
             {
                 Dock = DockStyle.Fill,
                 DrawMode = TabDrawMode.OwnerDrawFixed,
@@ -1057,7 +1073,7 @@ namespace RcloneDriveManager
                     font,
                     bounds,
                     foreClr,
-                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
             }
         }
 
