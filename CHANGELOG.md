@@ -2,6 +2,14 @@
 
 Tat ca thay doi dang chu y cua RcloneDrive GUI.
 
+## v1.0.57 - 2026-07-10
+
+- Gan prefix profile va ky tu o vao log rclone mount, vi du `[VPS M:]`, de tranh nham log cua o nay sang o khac.
+- Sua hanh vi thu nho/dong app: minimize khong tu an xuong tray; bam `X` se hoi an tray hay thoat app.
+- Them canh bao khi FTP/SFTP mount root `/`, khuyen dung thu muc site cu the nhu `/www/wwwroot/ten-domain`.
+- Bo qua mot so thu muc he thong de giam loi `permission denied` khi lo mount root FTP/SFTP.
+- Build lai `RcloneDrive.exe` ban `v1.0.57` de lam asset release GitHub.
+
 ## 2026.06.11.3
 
 - Nhan dien profile `AUTO` dang mount bang source rclone/process, khong chi bang ky tu o luu trong profile.

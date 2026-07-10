@@ -180,6 +180,13 @@ namespace RcloneDriveManager
         public string PageUrl { get; set; }
     }
 
+    public sealed class CapacityInfo
+    {
+        public string Text { get; set; }
+        public double? UsedRatio { get; set; }
+        public DateTime ExpiresAtUtc { get; set; }
+    }
+
     public sealed class RcloneFileItem
     {
         public string Path { get; set; }
@@ -201,6 +208,13 @@ namespace RcloneDriveManager
     public sealed class FlatTabControl : TabControl
     {
         private struct RECT { public int Left, Top, Right, Bottom; }
+
+        public FlatTabControl()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            DoubleBuffered = true;
+        }
+
         protected override void WndProc(ref Message m)
         {
             if (m.Msg == 0x1328 && !DesignMode) // TCM_ADJUSTRECT
@@ -219,7 +233,7 @@ namespace RcloneDriveManager
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
         private const string AppUpdateReleaseApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/releases/latest";
-        private const string AppVersion = "1.0.28";
+        private const string AppVersion = "1.0.57";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -234,11 +248,14 @@ namespace RcloneDriveManager
         private readonly List<string> _remotes = new List<string>();
         private readonly List<MountedDriveInfo> _mountedExternalDrives = new List<MountedDriveInfo>();
         private readonly Dictionary<string, MountedDriveInfo> _detectedRcloneDrives = new Dictionary<string, MountedDriveInfo>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, CapacityInfo> _capacityCache = new Dictionary<string, CapacityInfo>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _capacityRefreshPending = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly object _capacityLock = new object();
         private readonly List<Tuple<string, string, string>> _pendingLogLines = new List<Tuple<string, string, string>>();
         private Process _webUiProcess;
-        private readonly Color _bg = Color.FromArgb(243, 244, 246);
-        private readonly Color _surface = Color.FromArgb(248, 249, 250);
-        private readonly Color _line = Color.FromArgb(229, 231, 235);
+        private readonly Color _bg = Color.FromArgb(204, 209, 216);
+        private readonly Color _surface = Color.FromArgb(218, 222, 228);
+        private readonly Color _line = Color.FromArgb(178, 186, 197);
         private readonly Color _text = Color.FromArgb(25, 28, 29);
         private readonly Color _muted = Color.FromArgb(66, 71, 84);
         private readonly Color _primary = Color.FromArgb(33, 112, 228);
@@ -298,10 +315,15 @@ namespace RcloneDriveManager
         private string _connectionBusyText = "Đang kết nối";
         private int _connectionBusyStep;
         private System.Windows.Forms.Timer _connectionBusyTimer;
+        private NotifyIcon _trayIcon;
+        private ContextMenuStrip _trayMenu;
+        private bool _allowExit;
 
         public MainForm(string[] args)
         {
             _args = args ?? new string[0];
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            DoubleBuffered = true;
             _appDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
             _rcloneExe = Path.Combine(_appDir, "rclone.exe");
             _dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RcloneDriveManager");
@@ -316,9 +338,18 @@ namespace RcloneDriveManager
             var iconPath = Path.Combine(_appDir, "RcloneDriveManager", "RcloneDrive.ico");
             if (File.Exists(iconPath))
                 Icon = new Icon(iconPath);
+            SetupTrayIcon();
 
             BuildUi();
-            Shown += (s, e) => CenterOnActiveScreen();
+            Shown += (s, e) =>
+            {
+                CenterOnActiveScreen();
+                BeginInvoke(new Action(() =>
+                {
+                    Invalidate(true);
+                    Update();
+                }));
+            };
             Load += async (s, e) =>
             {
                 LoadProfiles();
@@ -334,7 +365,99 @@ namespace RcloneDriveManager
                 else
                     await MountAutoProfilesAsync(false);
             };
-            FormClosing += (s, e) => SaveProfiles();
+            FormClosing += (s, e) =>
+            {
+                SaveProfiles();
+                if (!_allowExit && e.CloseReason == CloseReason.UserClosing)
+                {
+                    var choice = MessageBox.Show(
+                        "Ban muon an app xuong khay he thong de tiep tuc giu cac o mount?\n\nYes: An xuong tray\nNo: Thoat app\nCancel: Huy",
+                        "RcloneDrive",
+                        MessageBoxButtons.YesNoCancel,
+                        MessageBoxIcon.Question);
+
+                    if (choice == DialogResult.Yes)
+                    {
+                        e.Cancel = true;
+                        HideToTray();
+                    }
+                    else if (choice == DialogResult.Cancel)
+                    {
+                        e.Cancel = true;
+                    }
+                    else
+                    {
+                        _allowExit = true;
+                        if (_trayIcon != null)
+                            _trayIcon.Visible = false;
+                    }
+                }
+            };
+        }
+
+        private void SetupTrayIcon()
+        {
+            _trayMenu = new ContextMenuStrip();
+            _trayMenu.Items.Add("Mở app", null, (s, e) => RestoreFromTray());
+            _trayMenu.Items.Add("Mount lại ổ tự động", null, async (s, e) =>
+            {
+                RestoreFromTray();
+                await MountAutoProfilesAsync(true);
+            });
+            _trayMenu.Items.Add(new ToolStripSeparator());
+            _trayMenu.Items.Add("Thoát", null, (s, e) => ExitFromTray());
+
+            _trayIcon = new NotifyIcon
+            {
+                Text = "RcloneDrive v" + AppVersion,
+                Icon = Icon ?? SystemIcons.Application,
+                ContextMenuStrip = _trayMenu,
+                Visible = true
+            };
+            _trayIcon.DoubleClick += (s, e) => RestoreFromTray();
+        }
+
+        private void HideToTray()
+        {
+            ShowInTaskbar = false;
+            Hide();
+            if (_trayIcon != null)
+                _trayIcon.Visible = true;
+        }
+
+        private void RestoreFromTray()
+        {
+            Show();
+            ShowInTaskbar = true;
+            WindowState = FormWindowState.Normal;
+            Activate();
+        }
+
+        private void ExitFromTray()
+        {
+            _allowExit = true;
+            if (_trayIcon != null)
+                _trayIcon.Visible = false;
+            Close();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                if (_trayIcon != null)
+                {
+                    _trayIcon.Visible = false;
+                    _trayIcon.Dispose();
+                    _trayIcon = null;
+                }
+                if (_trayMenu != null)
+                {
+                    _trayMenu.Dispose();
+                    _trayMenu = null;
+                }
+            }
+            base.Dispose(disposing);
         }
 
         private void BuildUi()
@@ -343,8 +466,8 @@ namespace RcloneDriveManager
             var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, BackColor = _bg };
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
-            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 340));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 430));
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             Controls.Add(root);
 
@@ -372,11 +495,12 @@ namespace RcloneDriveManager
 
             var left = new Panel { Dock = DockStyle.Fill, BackColor = _bg, Padding = new Padding(12, 12, 10, 12) };
             root.Controls.Add(left, 0, 1);
+            root.SetRowSpan(left, 2);
 
             var leftLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1 };
             leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
             leftLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
+            leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 122));
             left.Controls.Add(leftLayout);
             var driveListTitle = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 1, BackColor = _bg };
             driveListTitle.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
@@ -398,7 +522,7 @@ namespace RcloneDriveManager
                 ShowItemToolTips = true,
                 SmallImageList = new ImageList { ImageSize = new Size(1, 74) }
             };
-            profileList.Columns.Add("Ổ", 308);
+            profileList.Columns.Add("Ổ", 408);
             profileList.DrawColumnHeader += (s, e) => e.DrawDefault = false;
             profileList.DrawItem += DrawDriveListItem;
             profileList.DrawSubItem += DrawDriveListSubItem;
@@ -424,12 +548,23 @@ namespace RcloneDriveManager
             leftActions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             leftActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
             leftActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-            leftActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            leftActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
             leftActions.Controls.Add(ActionButton("Mới", (s, e) => NewProfile(), _surface, _text, 142), 0, 0);
             leftActions.Controls.Add(ActionButton("Lưu", (s, e) => SaveCurrentProfile(), _primary, Color.White, 142), 1, 0);
             leftActions.Controls.Add(ActionButton("Cài đặt", (s, e) => OpenDriveSettingsDialog(), _surface, _text, 142), 0, 1);
             leftActions.Controls.Add(ActionButton("Xóa", (s, e) => DeleteCurrentProfile(), _surface, _danger, 142), 1, 1);
-            statusLabel = new Label { Text = "Sẵn sàng", Dock = DockStyle.Fill, ForeColor = _muted, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(4, 0, 0, 0) };
+            statusLabel = new Label
+            {
+                Text = "Sẵn sàng",
+                Dock = DockStyle.Fill,
+                BackColor = Color.FromArgb(238, 241, 245),
+                ForeColor = _muted,
+                BorderStyle = BorderStyle.FixedSingle,
+                Font = new Font("Segoe UI", 8.2F, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleLeft,
+                Padding = new Padding(8, 0, 8, 0),
+                AutoEllipsis = true
+            };
             leftActions.Controls.Add(statusLabel, 0, 2);
             leftActions.SetColumnSpan(statusLabel, 2);
             leftLayout.Controls.Add(leftActions, 0, 2);
@@ -450,19 +585,9 @@ namespace RcloneDriveManager
             mainTabs.TabPages.Add(BuildConfigToolsTab());
 
             var logPanel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, BackColor = Color.FromArgb(15, 23, 42), Padding = new Padding(8) };
-            logPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             logPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             logPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            var logHeader = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, BackColor = Color.FromArgb(15, 23, 42) };
-            logHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            logHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240));
-            logHeader.Controls.Add(new Label { Text = "Log rclone", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(226, 232, 240), Font = new Font("Segoe UI", 10F, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
-            var logActions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, BackColor = Color.FromArgb(15, 23, 42), Padding = new Padding(0, 3, 8, 0) };
-            logActions.Controls.Add(LogButton("Xóa log", (s, e) => ClearLog(), _danger, 68));
-            logActions.Controls.Add(LogButton("Copy", (s, e) => CopyLog(), _text, 56));
-            logActions.Controls.Add(LogButton("Lỗi", (s, e) => ShowErrorLog(), _text, 48));
-            logHeader.Controls.Add(logActions, 1, 0);
-            logPanel.Controls.Add(logHeader, 0, 0);
+            logPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             liveLogLabel = new Label
             {
                 Text = "Log sẵn sàng",
@@ -474,12 +599,12 @@ namespace RcloneDriveManager
                 TextAlign = ContentAlignment.MiddleLeft,
                 Padding = new Padding(8, 0, 8, 0)
             };
-            logPanel.Controls.Add(liveLogLabel, 0, 1);
+            logPanel.Controls.Add(liveLogLabel, 0, 0);
             logBox = new RichTextBox
             {
                 Dock = DockStyle.Fill,
                 ReadOnly = true,
-                ScrollBars = RichTextBoxScrollBars.Vertical,
+                ScrollBars = RichTextBoxScrollBars.ForcedVertical,
                 BackColor = Color.FromArgb(15, 23, 42),
                 ForeColor = Color.FromArgb(203, 213, 225),
                 Font = new Font("Consolas", 9F),
@@ -488,10 +613,17 @@ namespace RcloneDriveManager
                 DetectUrls = false,
                 HideSelection = false
             };
-            logPanel.Controls.Add(logBox, 0, 2);
+            logPanel.Controls.Add(logBox, 0, 1);
+            var logActions = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, BackColor = Color.FromArgb(15, 23, 42), Padding = new Padding(0, 2, 0, 1), Margin = new Padding(0) };
+            logActions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 38));
+            logActions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 46));
+            logActions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 42));
+            logActions.Controls.Add(LogButton("Lỗi", (s, e) => ShowErrorLog(), _text, 0), 0, 0);
+            logActions.Controls.Add(LogButton("Copy", (s, e) => CopyLog(), _text, 0), 1, 0);
+            logActions.Controls.Add(LogButton("Xóa", (s, e) => ClearLog(), _danger, 0), 2, 0);
+            logPanel.Controls.Add(logActions, 0, 2);
             FlushPendingLogs();
-            root.Controls.Add(logPanel, 0, 2);
-            root.SetColumnSpan(logPanel, 2);
+            root.Controls.Add(logPanel, 1, 2);
             AddLog("Log sẵn sàng.");
         }
 
@@ -520,16 +652,7 @@ namespace RcloneDriveManager
             pageLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             page.Controls.Add(pageLayout);
 
-            var actionBar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = true, BackColor = _surface, Padding = new Padding(0, 4, 0, 4) };
-            driveConnectButton = ActionButton("Kết nối", async (s, e) => await ToggleSelectedConnectionAsync(), _primary, Color.White, 104);
-            actionBar.Controls.Add(driveConnectButton);
-            actionBar.Controls.Add(ActionButton("Lưu", (s, e) => SaveCurrentProfile(), _primary, Color.White, 68));
-            actionBar.Controls.Add(ActionButton("Code IDE", (s, e) => ApplyCodeIdePreset(), _surface, _text, 82));
-            actionBar.Controls.Add(ActionButton("Làm mới ổ", async (s, e) => await RefreshSelectedMountAsync(), _surface, _text, 88));
-            actionBar.Controls.Add(ActionButton("Tải về", async (s, e) => await DownloadRemoteToLocalAsync(), _surface, _text, 72));
-            actionBar.Controls.Add(ActionButton("Đẩy lên", async (s, e) => await UploadLocalChangesAsync(), _primary, Color.White, 78));
-            actionBar.Controls.Add(ActionButton("Mở local", (s, e) => OpenLocalWorkspace(), _surface, _text, 78));
-            actionBar.Controls.Add(ActionButton("OpenCode", (s, e) => OpenProjectInOpenCode(), _surface, _text, 84));
+            var actionBar = BuildDriveActionBar();
             pageLayout.Controls.Add(actionBar, 0, 0);
             var configTabs = new FlatTabControl
             {
@@ -606,6 +729,54 @@ namespace RcloneDriveManager
             advancedPanel.SetColumnSpan(extraArgsBox.Parent, 2);
             configTabs.TabPages.Add(advancedPage);
             return page;
+        }
+
+        private Control BuildDriveActionBar()
+        {
+            var bar = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = _surface,
+                Padding = new Padding(0, 2, 0, 8),
+                Margin = new Padding(0, 0, 0, 8)
+            };
+            bar.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+            bar.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+
+            var primaryRow = ActionRow();
+            driveConnectButton = ActionButton("Kết nối", async (s, e) => await ToggleSelectedConnectionAsync(), _primary, Color.White, 104);
+            primaryRow.Controls.Add(driveConnectButton);
+            primaryRow.Controls.Add(ActionButton("Lưu", (s, e) => SaveCurrentProfile(), _primary, Color.White, 72));
+            primaryRow.Controls.Add(ActionButton("Làm mới ổ", async (s, e) => await RefreshSelectedMountAsync(), _surface, _text, 96));
+            primaryRow.Controls.Add(ActionButton("Code IDE", (s, e) => ApplyCodeIdePreset(), _surface, _text, 86));
+
+            var toolRow = ActionRow();
+            toolRow.Controls.Add(ActionButton("Tải về", async (s, e) => await DownloadRemoteToLocalAsync(), _surface, _text, 76));
+            toolRow.Controls.Add(ActionButton("Đẩy lên", async (s, e) => await UploadLocalChangesAsync(), _primary, Color.White, 82));
+            toolRow.Controls.Add(ActionButton("Mở local", (s, e) => OpenLocalWorkspace(), _surface, _text, 84));
+            toolRow.Controls.Add(ActionButton("OpenCode", (s, e) => OpenProjectInOpenCode(), _surface, _text, 92));
+            toolRow.Controls.Add(ActionButton("Fix OC", (s, e) => AutoFixOpenCodeForSelectedProject(), _surface, _text, 76));
+
+            bar.Controls.Add(primaryRow, 0, 0);
+            bar.Controls.Add(toolRow, 0, 1);
+            return bar;
+        }
+
+        private FlowLayoutPanel ActionRow()
+        {
+            return new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                BackColor = _surface,
+                Padding = new Padding(0),
+                Margin = new Padding(0)
+            };
         }
 
         private TabPage ConfigSectionPage(string title)
@@ -860,11 +1031,11 @@ namespace RcloneDriveManager
 
         private TabPage BuildAddConfigTab()
         {
-            var page = new TabPage("Thêm config") { BackColor = _surface, Padding = new Padding(12), UseVisualStyleBackColor = false };
-            var pageLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, BackColor = _surface };
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 352));
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            var page = new TabPage("Thêm config") { BackColor = _surface, Padding = new Padding(12), UseVisualStyleBackColor = false, AutoScroll = true };
+            var pageLayout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, RowCount = 3, ColumnCount = 1, BackColor = _surface };
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 324));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 130));
             page.Controls.Add(pageLayout);
 
             var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 2, BackColor = _surface };
@@ -874,7 +1045,7 @@ namespace RcloneDriveManager
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
             pageLayout.Controls.Add(layout, 0, 0);
 
             configNameBox = AddText(layout, "Tên remote", "", 0, 0);
@@ -917,7 +1088,7 @@ namespace RcloneDriveManager
             layout.Controls.Add(paramsPanel, 0, 4);
             layout.SetColumnSpan(paramsPanel, 2);
 
-            var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(0, 12, 0, 0), BackColor = _surface };
+            var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(0, 8, 0, 4), BackColor = _surface, WrapContents = true, AutoScroll = false };
             actions.Controls.Add(ActionButton("Kiểm tra kết nối", async (s, e) => await CheckConfigConnectionAsync(true), _surface, _text, 162));
             actions.Controls.Add(ActionButton("Thêm config", async (s, e) => await AddConfigFromUiAsync(), _primary, Color.White, 132));
             actions.Controls.Add(ActionButton("Lưu config", async (s, e) => await SaveConfigFromUiAsync(), _surface, _text, 124));
@@ -1060,6 +1231,8 @@ namespace RcloneDriveManager
                 PressedBorderColor = pressedBorder,
                 PressedForeColor = pressedFore
             };
+            b.TabStop = false;
+            b.UseVisualStyleBackColor = false;
             b.Click += click;
             return b;
         }
@@ -1078,7 +1251,7 @@ namespace RcloneDriveManager
 
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 
-            var parentBgColor = tabs.Parent?.BackColor ?? Color.FromArgb(243, 244, 246);
+            var parentBgColor = tabs.Parent?.BackColor ?? Color.FromArgb(204, 209, 216);
             
             // Inflate fill bounds slightly to overwrite OS-drawn tab outlines/borders
             var fillRect = bounds;
@@ -1148,7 +1321,7 @@ namespace RcloneDriveManager
                 source = profile.Remote + DriveProfile.NormalizeRemotePath(profile.RemotePath, profile.Remote);
                 status = mounted ? "Đang kết nối" : "Chưa kết nối";
                 if (mounted)
-                    capacityText = TryGetDriveCapacityText(drive, out usedRatio);
+                    capacityText = TryGetRcloneCapacityText(source, drive, out usedRatio);
             }
             else
             {
@@ -1160,11 +1333,11 @@ namespace RcloneDriveManager
                     drive = external.DriveLetter;
                     source = external.DisplayRoot;
                     status = "Đang bật";
-                    capacityText = TryGetDriveCapacityText(drive, out usedRatio);
+                    capacityText = TryGetRcloneCapacityText(source, drive, out usedRatio);
                 }
             }
 
-            var cardColor = selected ? Color.FromArgb(219, 234, 254) : Color.FromArgb(255, 255, 255);
+            var cardColor = selected ? Color.FromArgb(198, 216, 242) : Color.FromArgb(230, 233, 238);
             using (var bg = new SolidBrush(cardColor))
                 g.FillRectangle(bg, bounds);
 
@@ -1245,7 +1418,7 @@ namespace RcloneDriveManager
             var compact = rect.Width < 30;
             var border = enabled && (icon == DriveRowActionIcon.Connect || icon == DriveRowActionIcon.Disconnect)
                 ? accent
-                : enabled ? Color.FromArgb(209, 213, 219) : Color.FromArgb(243, 244, 246);
+                : enabled ? Color.FromArgb(170, 179, 191) : Color.FromArgb(204, 209, 216);
             var iconColor = enabled
                 ? (icon == DriveRowActionIcon.Connect || icon == DriveRowActionIcon.Disconnect ? Color.White : Color.FromArgb(75, 85, 99))
                 : Color.FromArgb(156, 163, 175);
@@ -1462,26 +1635,163 @@ namespace RcloneDriveManager
             }
         }
 
-        private string TryGetDriveCapacityText(string drive, out double? usedRatio)
+        private string TryGetRcloneCapacityText(string source, string drive, out double? usedRatio)
         {
             usedRatio = null;
+            var key = CapacityCacheKey(source, drive);
+            lock (_capacityLock)
+            {
+                CapacityInfo cached;
+                if (_capacityCache.TryGetValue(key, out cached) && cached.ExpiresAtUtc > DateTime.UtcNow)
+                {
+                    usedRatio = cached.UsedRatio;
+                    return cached.Text;
+                }
+            }
+
+            QueueCapacityRefresh(source, drive, key);
+            return IsRcloneRemoteSource(source) ? "Đang lấy dung lượng..." : "Dung lượng chưa xác định";
+        }
+
+        private string CapacityCacheKey(string source, string drive)
+        {
+            if (!string.IsNullOrWhiteSpace(source))
+                return source.Trim();
+            if (!string.IsNullOrWhiteSpace(drive))
+                return NormalizeDriveChoice(drive);
+            return "";
+        }
+
+        private void QueueCapacityRefresh(string source, string drive, string key)
+        {
+            if (string.IsNullOrWhiteSpace(key) || !IsRcloneRemoteSource(source))
+                return;
+            lock (_capacityLock)
+            {
+                if (_capacityRefreshPending.Contains(key))
+                    return;
+                _capacityRefreshPending.Add(key);
+            }
+
+            Task.Run(() =>
+            {
+                var info = ReadRcloneCapacityInfo(source);
+                lock (_capacityLock)
+                {
+                    _capacityRefreshPending.Remove(key);
+                    _capacityCache[key] = info;
+                }
+                try
+                {
+                    if (!IsDisposed && profileList != null && profileList.IsHandleCreated)
+                        BeginInvoke(new Action(() => profileList.Invalidate()));
+                }
+                catch
+                {
+                }
+            });
+        }
+
+        private bool IsRcloneRemoteSource(string source)
+        {
+            if (string.IsNullOrWhiteSpace(source))
+                return false;
+            source = source.Trim();
+            var colon = source.IndexOf(':');
+            if (colon <= 0)
+                return false;
+            if (colon == 1 && source.Length >= 2 && char.IsLetter(source[0]))
+                return false;
+            var beforeColon = source.Substring(0, colon);
+            return beforeColon.IndexOf('\\') < 0 &&
+                   beforeColon.IndexOf('/') < 0 &&
+                   beforeColon.IndexOf(' ') < 0;
+        }
+
+        private CapacityInfo ReadRcloneCapacityInfo(string source)
+        {
+            var result = new CapacityInfo
+            {
+                Text = "Dung lượng chưa xác định",
+                UsedRatio = null,
+                ExpiresAtUtc = DateTime.UtcNow.AddMinutes(5)
+            };
             try
             {
-                if (string.IsNullOrWhiteSpace(drive) || IsAutoDrive(drive))
-                    return "Dung lượng chưa xác định";
-                var root = NormalizeDriveChoice(drive) + "\\";
-                var info = new DriveInfo(root);
-                if (!info.IsReady || info.TotalSize <= 0)
-                    return "Dung lượng chưa xác định";
+                if (!File.Exists(_rcloneExe))
+                    return result;
 
-                var used = Math.Max(0, info.TotalSize - info.AvailableFreeSpace);
-                usedRatio = Math.Max(0, Math.Min(1, used / (double)info.TotalSize));
-                return FormatBytes(info.AvailableFreeSpace) + " trống của " + FormatBytes(info.TotalSize);
+                var psi = new ProcessStartInfo
+                {
+                    FileName = _rcloneExe,
+                    Arguments = "about " + QuoteIfNeeded(source) + " --json",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8
+                };
+                using (var proc = Process.Start(psi))
+                {
+                    if (proc == null)
+                        return result;
+                    var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+                    var stderrTask = proc.StandardError.ReadToEndAsync();
+                    if (!proc.WaitForExit(12000))
+                    {
+                        try { proc.Kill(); } catch { }
+                        result.ExpiresAtUtc = DateTime.UtcNow.AddMinutes(1);
+                        return result;
+                    }
+                    Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 1000);
+                    if (proc.ExitCode != 0)
+                    {
+                        result.ExpiresAtUtc = DateTime.UtcNow.AddMinutes(2);
+                        return result;
+                    }
+
+                    var data = _json.Deserialize<Dictionary<string, object>>(SafeTaskResult(stdoutTask));
+                    var total = JsonLong(data, "total");
+                    var used = JsonLong(data, "used");
+                    var free = JsonLong(data, "free");
+                    if (total > 0)
+                    {
+                        if (used < 0 && free >= 0)
+                            used = Math.Max(0, total - free);
+                        if (free < 0 && used >= 0)
+                            free = Math.Max(0, total - used);
+                        if (free >= 0)
+                            result.Text = FormatBytes(free) + " trống của " + FormatBytes(total);
+                        else if (used >= 0)
+                            result.Text = FormatBytes(used) + " đã dùng của " + FormatBytes(total);
+                        if (used >= 0)
+                            result.UsedRatio = Math.Max(0, Math.Min(1, used / (double)total));
+                    }
+                    else if (used >= 0)
+                    {
+                        result.Text = FormatBytes(used) + " đã dùng";
+                    }
+                }
             }
             catch
             {
-                return "Dung lượng chưa xác định";
             }
+            return result;
+        }
+
+        private long JsonLong(Dictionary<string, object> data, string key)
+        {
+            try
+            {
+                object value;
+                if (data != null && data.TryGetValue(key, out value) && value != null)
+                    return Convert.ToInt64(value);
+            }
+            catch
+            {
+            }
+            return -1;
         }
 
         private void UpdateConnectButtonState()
@@ -1586,13 +1896,14 @@ namespace RcloneDriveManager
             var b = new RoundedButton
             {
                 Text = text,
-                Width = width,
-                Height = 28,
-                Margin = new Padding(3, 0, 3, 0),
+                Width = width > 0 ? width : 1,
+                Height = 20,
+                Dock = width > 0 ? DockStyle.None : DockStyle.Fill,
+                Margin = new Padding(1, 0, 1, 0),
                 BackColor = Color.White,
                 ForeColor = foreColor,
-                Font = new Font("Segoe UI", 8.5F, FontStyle.Bold),
-                BorderRadius = 8,
+                Font = new Font("Segoe UI", 7.5F, FontStyle.Bold),
+                BorderRadius = 6,
                 BorderSize = 1,
                 BorderColor = Color.FromArgb(203, 213, 225),
                 HoverBackColor = hoverBg,
@@ -1736,19 +2047,44 @@ namespace RcloneDriveManager
         private void UpdateStatusLine(string message, string level)
         {
             var clean = (message ?? "").Replace("\r", " ").Replace("\n", " ").Trim();
-            if (clean.Length > 120) clean = clean.Substring(0, 117) + "...";
+            if (clean.Length > 96) clean = clean.Substring(0, 93) + "...";
             var labelText = (string.IsNullOrWhiteSpace(level) ? "" : level + "  ") + clean;
             var color = LogLineColor(level, message);
             if (statusLabel != null)
             {
                 statusLabel.Text = labelText;
-                statusLabel.ForeColor = color;
+                statusLabel.ForeColor = StatusLineColor(level, message);
+                statusLabel.BackColor = StatusLineBackColor(level, message);
             }
             if (liveLogLabel != null)
             {
                 liveLogLabel.Text = DateTime.Now.ToString("HH:mm:ss") + "  " + labelText;
                 liveLogLabel.ForeColor = color;
             }
+        }
+
+        private Color StatusLineColor(string level, string message)
+        {
+            var text = ((level ?? "") + " " + (message ?? "")).ToUpperInvariant();
+            if (text.Contains("CRITICAL") || text.Contains("ERROR") || text.Contains("FAILED")) return Color.FromArgb(127, 29, 29);
+            if (text.Contains("WARN") || text.Contains("NOTICE")) return Color.FromArgb(113, 63, 18);
+            if (text.Contains("MOUNTED") || text.Contains("REMOTE OK") || text.Contains("ĐÃ") || text.Contains("DA ")) return Color.FromArgb(22, 101, 52);
+            if (string.Equals(level, "RCLONE", StringComparison.OrdinalIgnoreCase)) return Color.FromArgb(30, 64, 175);
+            if (string.Equals(level, "WEB", StringComparison.OrdinalIgnoreCase)) return Color.FromArgb(91, 33, 182);
+            if (string.Equals(level, "TUNNEL", StringComparison.OrdinalIgnoreCase)) return Color.FromArgb(21, 94, 117);
+            return Color.FromArgb(51, 65, 85);
+        }
+
+        private Color StatusLineBackColor(string level, string message)
+        {
+            var text = ((level ?? "") + " " + (message ?? "")).ToUpperInvariant();
+            if (text.Contains("CRITICAL") || text.Contains("ERROR") || text.Contains("FAILED")) return Color.FromArgb(254, 226, 226);
+            if (text.Contains("WARN") || text.Contains("NOTICE")) return Color.FromArgb(254, 243, 199);
+            if (text.Contains("MOUNTED") || text.Contains("REMOTE OK") || text.Contains("ĐÃ") || text.Contains("DA ")) return Color.FromArgb(220, 252, 231);
+            if (string.Equals(level, "RCLONE", StringComparison.OrdinalIgnoreCase)) return Color.FromArgb(219, 234, 254);
+            if (string.Equals(level, "WEB", StringComparison.OrdinalIgnoreCase)) return Color.FromArgb(237, 233, 254);
+            if (string.Equals(level, "TUNNEL", StringComparison.OrdinalIgnoreCase)) return Color.FromArgb(207, 250, 254);
+            return Color.FromArgb(238, 241, 245);
         }
 
         private Color LogLineColor(string level, string message)
@@ -2284,7 +2620,23 @@ namespace RcloneDriveManager
             if (_profiles.Count == 0)
                 _profiles.Add(new DriveProfile { Name = "Ổ api", Remote = "api:" });
             EnsureProfileIds();
+            RepairProfileLocalWorkDirsOnLoad();
             RenderProfiles();
+        }
+
+        private void RepairProfileLocalWorkDirsOnLoad()
+        {
+            var changed = false;
+            foreach (var p in _profiles)
+            {
+                var before = p.LocalWorkDir ?? "";
+                if (RepairProfileLocalWorkDir(p))
+                {
+                    changed = true;
+                    AddLog("Đã sửa thư mục local cho profile " + p.Name + ": " + before + " -> " + p.LocalWorkDir, "WARN");
+                }
+            }
+            if (changed) SaveProfiles();
         }
 
         private void EnsureProfileIds()
@@ -2313,7 +2665,7 @@ namespace RcloneDriveManager
         {
             ScanMountedDrives();
             if (profileList.Columns.Count > 0)
-                profileList.Columns[0].Width = Math.Max(260, profileList.ClientSize.Width - 4);
+                profileList.Columns[0].Width = Math.Max(360, profileList.ClientSize.Width - 22);
             profileList.Items.Clear();
             foreach (var p in _profiles)
             {
@@ -2399,10 +2751,26 @@ namespace RcloneDriveManager
         {
             _detectedRcloneDrives[detected.DriveLetter] = detected;
             if (!known.Contains(detected.DriveLetter) &&
+                !DetectedDriveBelongsToProfile(detected) &&
                 !_mountedExternalDrives.Any(d => string.Equals(d.DriveLetter, detected.DriveLetter, StringComparison.OrdinalIgnoreCase)))
             {
                 _mountedExternalDrives.Add(detected);
             }
+        }
+
+        private bool DetectedDriveBelongsToProfile(MountedDriveInfo detected)
+        {
+            if (detected == null) return false;
+            foreach (var profile in _profiles)
+            {
+                if (profile == null) continue;
+                if (!IsAutoDrive(profile.DriveLetter) &&
+                    string.Equals(NormalizeDriveChoice(profile.DriveLetter), NormalizeDriveChoice(detected.DriveLetter), StringComparison.OrdinalIgnoreCase))
+                    return true;
+                if (string.Equals(NormalizeSourceForCompare(detected.DisplayRoot), NormalizeSourceForCompare(profile.Source), StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
         }
 
         private string GetDriveDisplayRoot(string letter)
@@ -2692,7 +3060,7 @@ namespace RcloneDriveManager
             SelectComboValue(cacheModeCombo, "full");
             SelectComboValue(mountPresetCombo, "OpenCode");
             cacheMaxAgeBox.Text = "168h";
-            writeBackBox.Text = "2s";
+            writeBackBox.Text = "1s";
             transfersBox.Value = Math.Max(transfersBox.Minimum, Math.Min(transfersBox.Maximum, 1));
             bufferBox.Value = Math.Max(bufferBox.Minimum, Math.Min(bufferBox.Maximum, 16));
             networkModeBox.Checked = true;
@@ -2816,16 +3184,56 @@ namespace RcloneDriveManager
 
         private string GetDefaultLocalWorkDir(string profileName)
         {
-            var safe = string.IsNullOrWhiteSpace(profileName) ? "rclone" : Regex.Replace(profileName.Trim(), @"[^\w\-\. ]+", "_");
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "RcloneWorkspaces", safe);
+            return Path.Combine(GetLocalWorkspaceRoot(), SafeWorkspaceName(profileName));
+        }
+
+        private string GetLocalWorkspaceRoot()
+        {
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "RcloneWorkspaces");
+        }
+
+        private string SafeWorkspaceName(string profileName)
+        {
+            return string.IsNullOrWhiteSpace(profileName) ? "rclone" : Regex.Replace(profileName.Trim(), @"[^\w\-\. ]+", "_");
         }
 
         private string NormalizeLocalWorkDir(DriveProfile p)
         {
             if (p == null) return "";
             if (!string.IsNullOrWhiteSpace(p.LocalWorkDir))
-                return Environment.ExpandEnvironmentVariables(p.LocalWorkDir.Trim());
+            {
+                var local = Environment.ExpandEnvironmentVariables(p.LocalWorkDir.Trim());
+                if (!IsStaleDefaultWorkspace(p, local))
+                    return local;
+            }
             return GetDefaultLocalWorkDir(p.Name);
+        }
+
+        private bool RepairProfileLocalWorkDir(DriveProfile p)
+        {
+            if (p == null) return false;
+            var normalized = NormalizeLocalWorkDir(p);
+            if (string.Equals(p.LocalWorkDir ?? "", normalized, StringComparison.OrdinalIgnoreCase)) return false;
+            p.LocalWorkDir = normalized;
+            return true;
+        }
+
+        private bool IsStaleDefaultWorkspace(DriveProfile p, string localDir)
+        {
+            if (p == null || string.IsNullOrWhiteSpace(localDir)) return false;
+            try
+            {
+                var full = Path.GetFullPath(localDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                var root = Path.GetFullPath(GetLocalWorkspaceRoot()).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                if (!full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) return false;
+                var leaf = Path.GetFileName(full);
+                var expected = SafeWorkspaceName(p.Name);
+                return !string.Equals(leaf, expected, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private void EnsureLocalWorkspace(DriveProfile p)
@@ -2896,7 +3304,7 @@ namespace RcloneDriveManager
                 return;
             }
 
-            var subPath = Prompt.Show("Nhập thư mục project cần mở trong OpenCode:", "Mở OpenCode", "public_html");
+            var subPath = Prompt.Show("Nhập thư mục project cần mở trong OpenCode:", "Mở OpenCode", SuggestedOpenCodeProjectSubPath(p));
             if (string.IsNullOrWhiteSpace(subPath)) return;
             subPath = subPath.Trim().Trim('\\', '/').Replace('/', '\\');
             if (string.IsNullOrWhiteSpace(subPath))
@@ -2908,6 +3316,7 @@ namespace RcloneDriveManager
             var target = OpenCodeProjectRootForProfile(p, drive);
             if (!string.IsNullOrWhiteSpace(subPath))
                 target = Path.Combine(target, subPath);
+            target = CanonicalOpenCodeProjectPath(target);
 
             if (!Directory.Exists(target))
             {
@@ -2935,6 +3344,7 @@ namespace RcloneDriveManager
                 {
                     Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
                 }
+                ScheduleOpenCodeStateRepair(target);
                 AddLog("Đã mở OpenCode session cho project: " + target);
             }
             catch (Exception ex)
@@ -2946,6 +3356,105 @@ namespace RcloneDriveManager
                     AddLog("Đã mở thư mục project bằng Explorer: " + target);
                 }
                 catch { }
+            }
+        }
+
+        private void AutoFixOpenCodeForSelectedProject()
+        {
+            var p = SelectedProfile;
+            if (p == null)
+            {
+                MessageBox.Show("Hãy chọn một profile trước.", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            var drive = ActiveDriveForProfile(p);
+            if (string.IsNullOrWhiteSpace(drive) || !IsMounted(drive))
+            {
+                MessageBox.Show("Ổ này chưa mount. Hãy kết nối trước.", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var defaultProject = SuggestedOpenCodeProjectSubPath(p);
+            var subPath = Prompt.Show("Nhập thư mục project cần tự sửa OpenCode:", "Auto fix OpenCode", defaultProject);
+            if (string.IsNullOrWhiteSpace(subPath)) return;
+            subPath = subPath.Trim().Trim('\\', '/').Replace('/', '\\');
+            if (string.IsNullOrWhiteSpace(subPath))
+            {
+                MessageBox.Show("Không sửa trực tiếp gốc ổ mount. Hãy nhập thư mục project cụ thể.", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var projectDir = OpenCodeProjectRootForProfile(p, drive);
+            projectDir = Path.Combine(projectDir, subPath);
+            var canonicalProjectDir = CanonicalOpenCodeProjectPath(projectDir);
+            try
+            {
+                CloseOpenCodeBeforeStateRepair();
+                EnsureGitProjectForOpenCode(canonicalProjectDir);
+                RepairOpenCodeProjectSession(canonicalProjectDir);
+                EnsureOpenCodeWorkspaceVcs(canonicalProjectDir);
+                var exe = FindOpenCodeExe();
+                if (!string.IsNullOrWhiteSpace(exe) && File.Exists(exe))
+                    Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true });
+                ScheduleOpenCodeStateRepair(canonicalProjectDir);
+                AddLog("Đã auto fix OpenCode project: " + canonicalProjectDir);
+            }
+            catch (Exception ex)
+            {
+                AddLog("Auto fix OpenCode thất bại: " + ex.Message, "ERROR");
+            }
+        }
+
+        private void ScheduleOpenCodeStateRepair(string projectDir)
+        {
+            if (string.IsNullOrWhiteSpace(projectDir)) return;
+            Task.Run(() =>
+            {
+                Thread.Sleep(2600);
+                try
+                {
+                    RepairOpenCodeProjectSession(projectDir);
+                    EnsureOpenCodeWorkspaceVcs(projectDir);
+                    BeginInvoke(new Action(() => AddLog("OpenCode: đã xác nhận lại project hiện tại: " + projectDir, "INFO")));
+                }
+                catch (Exception ex)
+                {
+                    BeginInvoke(new Action(() => AddLog("OpenCode: không xác nhận lại được project: " + ex.Message, "WARN")));
+                }
+            });
+        }
+
+        private string SuggestedOpenCodeProjectSubPath(DriveProfile p)
+        {
+            var remotePath = DriveProfile.NormalizeRemotePath(p == null ? "" : p.RemotePath, p == null ? "" : p.Remote).Trim('/');
+            if (remotePath.IndexOf("www/wwwroot/", StringComparison.OrdinalIgnoreCase) >= 0)
+                return remotePath.Replace('/', '\\');
+            if (remotePath.IndexOf("public_html", StringComparison.OrdinalIgnoreCase) >= 0)
+                return remotePath.Replace('/', '\\');
+            return "public_html";
+        }
+
+        private string CanonicalOpenCodeProjectPath(string projectDir)
+        {
+            try
+            {
+                var full = Path.GetFullPath(projectDir).TrimEnd('\\', '/');
+                if (Regex.IsMatch(full, @"^[A-Za-z]:\\", RegexOptions.IgnoreCase))
+                {
+                    var displayRoot = GetDriveDisplayRoot(full.Substring(0, 2));
+                    if (!string.IsNullOrWhiteSpace(displayRoot) && displayRoot.StartsWith(@"\\", StringComparison.Ordinal))
+                    {
+                        var relative = full.Length > 3 ? full.Substring(3).TrimStart('\\') : "";
+                        return string.IsNullOrWhiteSpace(relative)
+                            ? displayRoot.TrimEnd('\\')
+                            : displayRoot.TrimEnd('\\') + "\\" + relative;
+                    }
+                }
+                return full;
+            }
+            catch
+            {
+                return (projectDir ?? "").TrimEnd('\\', '/');
             }
         }
 
@@ -2988,11 +3497,17 @@ namespace RcloneDriveManager
             {
                 if (string.IsNullOrWhiteSpace(projectDir) || !Directory.Exists(projectDir)) return;
                 var gitDir = Path.Combine(projectDir, ".git");
-                if (Directory.Exists(gitDir) || File.Exists(gitDir)) return;
+                if ((Directory.Exists(gitDir) || File.Exists(gitDir)) && IsValidGitProject(projectDir))
+                {
+                    EnsureOpenCodeWorkspaceVcs(projectDir);
+                    return;
+                }
+                if (Directory.Exists(gitDir) || File.Exists(gitDir))
+                    AddLog("OpenCode: .git đang tồn tại nhưng Git không nhận repo, sẽ thử sửa lại metadata.", "WARN");
 
                 if (!RunGit(projectDir, "init -b main"))
                 {
-                    AddLog("Khong the khoi tao Git cho OpenCode. Hay cai Git for Windows neu may chua co.", "WARN");
+                    AddLog("Không thể sửa Git cho OpenCode. Ổ mount có thể chặn ghi .git/refs; lịch sử OpenCode có thể không ổn định.", "WARN");
                     return;
                 }
 
@@ -3003,6 +3518,7 @@ namespace RcloneDriveManager
                     AddLog("Da khoi tao Git cho OpenCode: " + projectDir);
                 else
                     AddLog("Da git init nhung chua tao duoc commit dau tien: " + projectDir, "WARN");
+                EnsureOpenCodeWorkspaceVcs(projectDir);
             }
             catch (Exception ex)
             {
@@ -3010,7 +3526,17 @@ namespace RcloneDriveManager
             }
         }
 
+        private bool IsValidGitProject(string projectDir)
+        {
+            return RunGit(projectDir, "rev-parse --is-inside-work-tree", false);
+        }
+
         private bool RunGit(string workingDir, string arguments)
+        {
+            return RunGit(workingDir, arguments, true);
+        }
+
+        private bool RunGit(string workingDir, string arguments, bool logErrors)
         {
             try
             {
@@ -3032,13 +3558,13 @@ namespace RcloneDriveManager
                     if (!proc.WaitForExit(20000))
                     {
                         try { proc.Kill(); } catch { }
-                        AddLog("Git timeout: git " + arguments, "WARN");
+                        if (logErrors) AddLog("Git timeout: git " + arguments, "WARN");
                         return false;
                     }
                     if (proc.ExitCode != 0)
                     {
                         var detail = string.IsNullOrWhiteSpace(error) ? output : error;
-                        AddLog("Git loi: git " + arguments + " | " + detail.Trim(), "WARN");
+                        if (logErrors) AddLog("Git loi: git " + arguments + " | " + detail.Trim(), "WARN");
                         return false;
                     }
                     return true;
@@ -3046,9 +3572,105 @@ namespace RcloneDriveManager
             }
             catch (Exception ex)
             {
-                AddLog("Khong chay duoc git.exe: " + ex.Message, "WARN");
+                if (logErrors) AddLog("Khong chay duoc git.exe: " + ex.Message, "WARN");
                 return false;
             }
+        }
+
+        private void EnsureOpenCodeWorkspaceVcs(string projectDir)
+        {
+            try
+            {
+                var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ai.opencode.desktop");
+                if (!Directory.Exists(appData)) return;
+                var prefix = "opencode.workspace." + OpenCodeWorkspaceSlug(projectDir) + ".";
+                var workspaceFile = Directory.GetFiles(appData, "opencode.workspace.*.dat")
+                    .Where(f => Path.GetFileName(f).StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(File.GetLastWriteTimeUtc)
+                    .FirstOrDefault();
+                if (string.IsNullOrWhiteSpace(workspaceFile)) return;
+
+                var serializer = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+                var root = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(workspaceFile, Encoding.UTF8)) ??
+                           new Dictionary<string, object>();
+                root["workspace:vcs"] = serializer.Serialize(new Dictionary<string, object>
+                {
+                    { "value", new Dictionary<string, object> { { "branch", "main" }, { "default_branch", "main" } } }
+                });
+                File.WriteAllText(workspaceFile, serializer.Serialize(root), new UTF8Encoding(false));
+                AddLog("Đã cập nhật OpenCode workspace branch main: " + projectDir);
+            }
+            catch (Exception ex)
+            {
+                AddLog("Không cập nhật được OpenCode workspace VCS: " + ex.Message, "WARN");
+            }
+        }
+
+        private string FindRecentOpenCodeSessionIdForProject(Dictionary<string, object> globalRoot, string projectDir)
+        {
+            try
+            {
+                var serializer = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+                object raw;
+                if (globalRoot != null && globalRoot.TryGetValue("notification", out raw))
+                {
+                    var notification = serializer.Deserialize<Dictionary<string, object>>(Convert.ToString(raw) ?? "{}");
+                    object listRaw;
+                    var list = notification != null && notification.TryGetValue("list", out listRaw) ? listRaw as ArrayList : null;
+                    if (list != null)
+                    {
+                        foreach (var item in list.Cast<object>().Reverse())
+                        {
+                            var row = item as Dictionary<string, object>;
+                            if (row == null) continue;
+                            var directory = row.ContainsKey("directory") ? Convert.ToString(row["directory"]) : "";
+                            var session = row.ContainsKey("session") ? Convert.ToString(row["session"]) : "";
+                            var type = row.ContainsKey("type") ? Convert.ToString(row["type"]) : "";
+                            if (session.StartsWith("ses_", StringComparison.OrdinalIgnoreCase) &&
+                                SameMountedProjectPath(directory, projectDir) &&
+                                string.Equals(type, "turn-complete", StringComparison.OrdinalIgnoreCase))
+                                return session;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+            return FindRecentOpenCodeWorkspaceSessionId();
+        }
+
+        private string FindRecentOpenCodeWorkspaceSessionId()
+        {
+            try
+            {
+                var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ai.opencode.desktop");
+                if (!Directory.Exists(appData)) return "";
+                var serializer = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+                foreach (var file in Directory.GetFiles(appData, "opencode.workspace.*.dat").OrderByDescending(File.GetLastWriteTimeUtc).Take(16))
+                {
+                    var root = serializer.Deserialize<Dictionary<string, object>>(File.ReadAllText(file, Encoding.UTF8));
+                    object raw;
+                    if (root == null || !root.TryGetValue("workspace:model-selection", out raw)) continue;
+                    var model = serializer.Deserialize<Dictionary<string, object>>(Convert.ToString(raw) ?? "{}");
+                    object sessionsRaw;
+                    if (model == null || !model.TryGetValue("session", out sessionsRaw)) continue;
+                    var sessions = sessionsRaw as Dictionary<string, object>;
+                    if (sessions == null || sessions.Count == 0) continue;
+                    return sessions.Keys.FirstOrDefault(k => k.StartsWith("ses_", StringComparison.OrdinalIgnoreCase)) ?? "";
+                }
+            }
+            catch
+            {
+            }
+            return "";
+        }
+
+        private string OpenCodeWorkspaceSlug(string projectDir)
+        {
+            var normalized = (projectDir ?? "").Replace('/', '\\').TrimEnd('\\');
+            normalized = Regex.Replace(normalized, @"[^A-Za-z0-9]", "-").Trim('-');
+            return normalized.Length > 12 ? normalized.Substring(0, 12) : normalized;
         }
 
         private void RepairOpenCodeProjectSession(string projectDir)
@@ -3101,6 +3723,20 @@ namespace RcloneDriveManager
                         copied["at"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                         sessions[projectDir] = copied;
                         sessions.Remove(match.Key);
+                    }
+                    else
+                    {
+                        var sessionId = FindRecentOpenCodeSessionIdForProject(root, projectDir);
+                        if (!string.IsNullOrWhiteSpace(sessionId))
+                        {
+                            sessions[projectDir] = new Dictionary<string, object>
+                            {
+                                { "directory", projectDir },
+                                { "id", sessionId },
+                                { "at", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }
+                            };
+                            AddLog("Đã gắn session OpenCode hiện có vào project: " + sessionId);
+                        }
                     }
                 }
 
@@ -3275,30 +3911,119 @@ namespace RcloneDriveManager
 
         private async Task DownloadRemoteToLocalAsync()
         {
+            SaveCurrentProfile();
             var p = SelectedProfile;
             if (p == null)
             {
                 MessageBox.Show("Hãy chọn một profile trước.", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
+            if (RepairProfileLocalWorkDir(p)) SaveProfiles();
             EnsureLocalWorkspace(p);
             var localDir = NormalizeLocalWorkDir(p);
-            AddLog("Tải host về máy: " + p.Source + " -> " + localDir);
+            AddLog("Tải host về máy [" + p.Name + "]: " + p.Source + " -> " + localDir);
             await RunCaptureAsync("sync", p.Source, localDir, "--progress", "--transfers", "2", "--checkers", "1");
         }
 
         private async Task UploadLocalChangesAsync()
         {
+            SaveCurrentProfile();
             var p = SelectedProfile;
             if (p == null)
             {
                 MessageBox.Show("Hãy chọn một profile trước.", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
+            if (RepairProfileLocalWorkDir(p)) SaveProfiles();
             EnsureLocalWorkspace(p);
             var localDir = NormalizeLocalWorkDir(p);
-            AddLog("Đẩy thay đổi lên host: " + localDir + " -> " + p.Source);
-            await RunCaptureAsync("copy", localDir, p.Source, "--progress", "--transfers", "2", "--checkers", "1");
+            if (!HasUploadableLocalFile(localDir))
+            {
+                var liveMount = MountedRootForProfile(p);
+                var message = "Thư mục local chưa có file để đẩy: " + localDir + "\r\n\r\n" +
+                              "Nút Đẩy lên chỉ copy từ thư mục local workspace lên host. Nếu bạn đang thấy file trong ổ mount " + liveMount + " thì đó là ổ live của rclone, file được ghi trực tiếp qua mount và không đi qua nút Đẩy lên.\r\n\r\n" +
+                              "Muốn dùng nút Đẩy lên: bấm Tải về trước, sửa file trong thư mục local ở trên, rồi Đẩy lên lại.";
+                AddLog(message, "WARN");
+                MessageBox.Show(message, "Chưa có file để đẩy", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            AddLog("Đẩy thay đổi lên host [" + p.Name + "]: " + localDir + " -> " + p.Source);
+            var output = await RunCaptureAsync(
+                "copy",
+                localDir,
+                p.Source,
+                "--progress",
+                "--transfers", "2",
+                "--checkers", "1",
+                "--exclude", ".git",
+                "--exclude", ".git/**");
+            if (LooksLikeNoTransfer(output))
+                AddLog("Không có file mới cần đẩy cho profile " + p.Name + ".", "WARN");
+            else
+                AddLog("Đã chạy đẩy lên host cho profile " + p.Name + ".");
+        }
+
+        private bool HasUploadableLocalFile(string localDir)
+        {
+            if (string.IsNullOrWhiteSpace(localDir) || !Directory.Exists(localDir)) return false;
+            try
+            {
+                var stack = new Stack<string>();
+                stack.Push(localDir);
+                while (stack.Count > 0)
+                {
+                    var dir = stack.Pop();
+                    foreach (var file in Directory.EnumerateFiles(dir))
+                    {
+                        if (!IsInsideGitDirectory(localDir, file))
+                            return true;
+                    }
+                    foreach (var child in Directory.EnumerateDirectories(dir))
+                    {
+                        if (string.Equals(Path.GetFileName(child), ".git", StringComparison.OrdinalIgnoreCase)) continue;
+                        stack.Push(child);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLog("Không kiểm tra được thư mục local trước khi đẩy: " + ex.Message, "WARN");
+                return true;
+            }
+            return false;
+        }
+
+        private bool IsInsideGitDirectory(string rootDir, string path)
+        {
+            try
+            {
+                var relative = Path.GetFullPath(path).Substring(Path.GetFullPath(rootDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                return relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(x => string.Equals(x, ".git", StringComparison.OrdinalIgnoreCase));
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool LooksLikeNoTransfer(string output)
+        {
+            return Regex.IsMatch(output ?? "", @"Transferred:\s+0\s+B\s*/\s*0\s+B", RegexOptions.IgnoreCase);
+        }
+
+        private string MountedRootForProfile(DriveProfile p)
+        {
+            try
+            {
+                var drive = ActiveDriveForProfile(p);
+                if (string.IsNullOrWhiteSpace(drive) || IsAutoDrive(drive) || !IsMounted(drive))
+                    return "(chưa mount)";
+                return ProjectRootForProfile(p, drive);
+            }
+            catch
+            {
+                return "(không xác định)";
+            }
         }
 
         private void ClearCacheForSelectedProfile()
@@ -4346,7 +5071,9 @@ namespace RcloneDriveManager
             CleanupDeadMountState(p);
             if (IsMountedProfile(p))
             {
+                var activeDrive = ActiveDriveForProfile(p);
                 AddLog(DriveDisplay(p) + " is already mounted.", "WARN");
+                WarnIfMountedWithOldWriteBack(p, activeDrive);
                 return;
             }
             if (!IsWinFspInstalled())
@@ -4376,6 +5103,8 @@ namespace RcloneDriveManager
             if (!await EnsureProfileTunnelAsync(p))
                 return;
 
+            WarnIfUnsafeRemoteRootMount(p);
+
             var preflight = await TestRemoteBeforeMountAsync(p.Source);
             if (!preflight)
             {
@@ -4389,8 +5118,8 @@ namespace RcloneDriveManager
             AddLog("Mount " + p.Source + " -> " + mountDrive);
             var proc = StartRclone(args, false);
             proc.EnableRaisingEvents = true;
-            proc.OutputDataReceived += (s, e) => { if (e.Data != null) AddLog(e.Data); };
-            proc.ErrorDataReceived += (s, e) => { if (e.Data != null) AddLog(e.Data, "RCLONE"); };
+            proc.OutputDataReceived += (s, e) => AddMountedRcloneLog(p, mountDrive, e.Data, "RCLONE");
+            proc.ErrorDataReceived += (s, e) => AddMountedRcloneLog(p, mountDrive, e.Data, "RCLONE");
             proc.Exited += (s, e) =>
             {
                 AddLog("Mount process exited for " + mountDrive + " code " + proc.ExitCode, proc.ExitCode == 0 ? "INFO" : "WARN");
@@ -4442,6 +5171,14 @@ namespace RcloneDriveManager
             }
         }
 
+        private void AddMountedRcloneLog(DriveProfile p, string drive, string line, string level)
+        {
+            if (string.IsNullOrWhiteSpace(line)) return;
+            var name = p == null || string.IsNullOrWhiteSpace(p.Name) ? "profile" : p.Name.Trim();
+            var driveText = string.IsNullOrWhiteSpace(drive) ? "" : " " + drive.Trim();
+            AddLog("[" + name + driveText + "] " + line, level);
+        }
+
         private List<string> BuildMountArgs(DriveProfile p, string mountDrive, string volumeName)
         {
             var args = new List<string> { "mount", p.Source, mountDrive };
@@ -4453,7 +5190,7 @@ namespace RcloneDriveManager
                 args.Add("--vfs-cache-max-age");
                 args.Add(ProfileDuration(p.VfsCacheMaxAge, "72h"));
                 args.Add("--vfs-write-back");
-                args.Add(ProfileDuration(p.VfsWriteBack, "5s"));
+                args.Add(GetWriteBackDelay(p, remoteType));
                 if (!string.IsNullOrWhiteSpace(p.CacheDir))
                 {
                     args.Add("--cache-dir");
@@ -4478,10 +5215,40 @@ namespace RcloneDriveManager
             args.Add(GetTransferCount(p, remoteType).ToString());
             ApplyRaiDriveLikeArgs(args, p, remoteType);
             ApplyOpenCodeMountArgs(args, p, remoteType);
-            ApplyFtpSafeMountArgs(args, p, remoteType);
+            ApplyHostingSafeMountArgs(args, p, remoteType);
             AddExtraArgs(args, p.ExtraArgs);
             args.Add("-v");
             return args;
+        }
+
+        private void WarnIfMountedWithOldWriteBack(DriveProfile p, string drive)
+        {
+            try
+            {
+                if (p == null || string.IsNullOrWhiteSpace(drive) || IsAutoDrive(drive)) return;
+                var mount = GetRcloneMountProcesses()
+                    .FirstOrDefault(x => string.Equals(NormalizeDriveChoice(x.DriveLetter), NormalizeDriveChoice(drive), StringComparison.OrdinalIgnoreCase));
+                if (mount == null || string.IsNullOrWhiteSpace(mount.CommandLine)) return;
+                var remoteType = GetRemoteType(p.Remote);
+                var expected = GetWriteBackDelay(p, remoteType);
+                var actual = ExtractArgValue(mount.CommandLine, "--vfs-write-back");
+                if (!string.IsNullOrWhiteSpace(actual) &&
+                    !string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
+                {
+                    AddLog("Ổ " + drive + " đang mount bằng --vfs-write-back " + actual + ", cấu hình hiện tại cần " + expected + ". Hãy bấm Làm mới ổ hoặc Ngắt/Kết nối lại để sửa code xong upload nhanh hơn.", "WARN");
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private string ExtractArgValue(string commandLine, string argName)
+        {
+            if (string.IsNullOrWhiteSpace(commandLine) || string.IsNullOrWhiteSpace(argName)) return "";
+            var pattern = Regex.Escape(argName) + @"\s+(""(?<v>[^""]+)""|'(?<v>[^']+)'|(?<v>\S+))";
+            var match = Regex.Match(commandLine, pattern, RegexOptions.IgnoreCase);
+            return match.Success ? match.Groups["v"].Value.Trim() : "";
         }
 
         private bool IsLivePreset(DriveProfile p)
@@ -4534,6 +5301,15 @@ namespace RcloneDriveManager
                 string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase))
                 return "30s";
             return "5s";
+        }
+
+        private string GetWriteBackDelay(DriveProfile p, string remoteType)
+        {
+            if ((IsOpenCodePreset(p) || IsLivePreset(p)) &&
+                (string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase)))
+                return "1s";
+            return ProfileDuration(p.VfsWriteBack, "5s");
         }
 
         private int GetBufferSizeMb(DriveProfile p, string remoteType)
@@ -4612,24 +5388,61 @@ namespace RcloneDriveManager
             }
         }
 
-        private void ApplyFtpSafeMountArgs(List<string> args, DriveProfile p, string remoteType)
+        private void ApplyHostingSafeMountArgs(List<string> args, DriveProfile p, string remoteType)
         {
-            if (!string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase)) return;
+            if (!(string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
+                  string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase)))
+                return;
 
-            AddLog("Áp dụng preset FTP kiểu RaiDrive: cache metadata lâu hơn, transfers thấp, read-ahead cao, bỏ qua .ftpquota.");
+            AddLog("Áp dụng preset hosting an toàn: giảm retry, cache ổn định, bỏ qua file hệ thống không được phép ghi.");
             AddArgIfMissing(args, p.ExtraArgs, "--checkers", "1");
-            AddArgIfMissing(args, p.ExtraArgs, "--retries", "6");
-            AddArgIfMissing(args, p.ExtraArgs, "--low-level-retries", "20");
+            AddArgIfMissing(args, p.ExtraArgs, "--retries", "3");
+            AddArgIfMissing(args, p.ExtraArgs, "--low-level-retries", "10");
             AddArgIfMissing(args, p.ExtraArgs, "--timeout", "2m");
             AddArgIfMissing(args, p.ExtraArgs, "--contimeout", "15s");
 
             if (!HasExtraArg(p.ExtraArgs, "--exclude"))
             {
-                args.Add("--exclude");
-                args.Add(".ftpquota");
-                args.Add("--exclude");
-                args.Add("**/.ftpquota");
+                AddExcludePattern(args, ".ftpquota");
+                AddExcludePattern(args, "**/.ftpquota");
+                AddExcludePattern(args, ".user.ini");
+                AddExcludePattern(args, "**/.user.ini");
+                AddExcludePattern(args, ".well-known/acme-challenge/**");
+                AddExcludePattern(args, "**/.well-known/acme-challenge/**");
+                if (IsRemoteRootPath(p))
+                {
+                    AddExcludePattern(args, "www/server/panel/vhost/**");
+                    AddExcludePattern(args, "www/wwwlogs/**");
+                    AddExcludePattern(args, "proc/**");
+                    AddExcludePattern(args, "sys/**");
+                    AddExcludePattern(args, "dev/**");
+                    AddExcludePattern(args, "run/**");
+                }
             }
+        }
+
+        private bool IsRemoteRootPath(DriveProfile p)
+        {
+            return string.Equals(DriveProfile.NormalizeRemotePath(p == null ? "" : p.RemotePath, p == null ? "" : p.Remote), "/", StringComparison.Ordinal);
+        }
+
+        private void WarnIfUnsafeRemoteRootMount(DriveProfile p)
+        {
+            var remoteType = GetRemoteType(p.Remote);
+            if (!(string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
+                  string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase)))
+                return;
+            if (!IsRemoteRootPath(p))
+                return;
+
+            AddLog("Profile " + p.Name + " đang mount root /. Với FTP/SFTP để code ổn định hơn, nên đổi Đường dẫn remote sang thư mục site cụ thể như /www/wwwroot/ten-domain thay vì /.", "WARN");
+            AddLog("Mount root / có thể gây lỗi permission denied ở www/server, www/wwwlogs, .git, .user.ini hoặc lỗi FTP 421 Too many connections khi IDE quét nhiều file.", "WARN");
+        }
+
+        private void AddExcludePattern(List<string> args, string pattern)
+        {
+            args.Add("--exclude");
+            args.Add(pattern);
         }
 
         private void AddArgIfMissing(List<string> args, string extra, string name, string value)
@@ -4662,6 +5475,11 @@ namespace RcloneDriveManager
         private string PreflightErrorMessage(string output, int exitCode)
         {
             var text = output ?? "";
+            if (text.IndexOf("Ftp Init Failed", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("\"WinErrorCode\":1237", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "FTP khởi tạo thất bại (Ftp Init Failed / 1237). Hay kiem tra host, port, user/pass, passive mode, firewall/SSL va so ket noi FTP cua host. Khong mount. Exit code: " + exitCode;
+            }
             if (text.IndexOf("Too many connections", StringComparison.OrdinalIgnoreCase) >= 0 || text.IndexOf("421", StringComparison.OrdinalIgnoreCase) >= 0)
                 return "FTP server đang giới hạn quá nhiều kết nối từ IP này. Hãy ngắt các ổ/phiên FTP cũ, đợi vài phút rồi thử lại. Không mount. Exit code: " + exitCode;
             if (text.IndexOf("Login authentication failed", StringComparison.OrdinalIgnoreCase) >= 0 || text.IndexOf("530", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -6089,6 +6907,7 @@ namespace RcloneDriveManager
 
         public RoundedButton()
         {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             FlatStyle = FlatStyle.Flat;
             FlatAppearance.BorderSize = 0;
             Cursor = Cursors.Hand;
@@ -6144,6 +6963,8 @@ namespace RcloneDriveManager
         {
             var g = pevent.Graphics;
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+            g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
 
             var rect = ClientRectangle;
 
@@ -6153,7 +6974,7 @@ namespace RcloneDriveManager
 
             if (!Enabled)
             {
-                backColor = Color.FromArgb(243, 244, 246);
+                backColor = Color.FromArgb(204, 209, 216);
                 borderColor = Color.FromArgb(226, 232, 240);
                 foreColor = Color.FromArgb(156, 163, 175);
             }
