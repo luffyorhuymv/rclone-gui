@@ -89,6 +89,41 @@ Neu host yeu hoac hay disconnect, dung workflow local:
 2. Code trong thu muc local
 3. `Day len host`
 
+### Code Workspace
+
+Che do `Code Workspace` toi uu hon viec code truc tiep tren o mount:
+
+1. Chon profile.
+2. Bam `Code WS`.
+3. Neu thu muc local dang trong, app se tai host ve local truoc.
+4. App mo thu muc local trong Explorer.
+5. Khi sua/lua file trong local, app tu upload file do len host bang `rclone copyto`.
+
+Thu muc mac dinh:
+
+```text
+%USERPROFILE%\Documents\RcloneWorkspaces\<ten-profile>
+```
+
+Trong tab `Cau hinh` -> `Nang cao` co cac tuy chon:
+
+- `Code Workspace auto upload`: bat/tat watcher.
+- `Delay upload`: doi file on dinh truoc khi upload.
+- `Khong ghi de file host moi hon`: bo qua upload neu host co ve moi hon local.
+- `Bo qua khi auto upload`: ignore `.git`, `node_modules`, `vendor`, `.env`, `.user.ini`, `.well-known`, file tam.
+
+Luu y:
+
+- Xoa file local se khong tu xoa tren host, de tranh mat du lieu ngoai y muon.
+- Nen mo IDE/OpenCode vao thu muc local, khong mo truc tiep o FTP/SFTP.
+- Neu workspace local co `.git`, app tu set:
+
+```bash
+git config core.fscache false
+git config core.trustctime false
+git config core.checkstat minimal
+```
+
 ## Backup/import config
 
 Nut `Dong bo config len` upload:

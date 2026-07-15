@@ -68,6 +68,10 @@ namespace RcloneDriveManager
         public string TunnelHostname { get; set; }
         public int TunnelLocalPort { get; set; }
         public string TunnelCommand { get; set; }
+        public bool CodeWorkspaceEnabled { get; set; }
+        public int CodeWorkspaceDelaySeconds { get; set; }
+        public bool CodeWorkspaceSkipNewerRemote { get; set; }
+        public string CodeWorkspaceIgnores { get; set; }
 
         public DriveProfile()
         {
@@ -93,7 +97,13 @@ namespace RcloneDriveManager
             TunnelHostname = "";
             TunnelLocalPort = 0;
             TunnelCommand = "";
+            CodeWorkspaceEnabled = false;
+            CodeWorkspaceDelaySeconds = 2;
+            CodeWorkspaceSkipNewerRemote = true;
+            CodeWorkspaceIgnores = DefaultCodeWorkspaceIgnores;
         }
+
+        public const string DefaultCodeWorkspaceIgnores = ".git/**;node_modules/**;vendor/**;cache/**;tmp/**;.env;.user.ini;.ftpquota;.well-known/**;*.tmp;*.swp;~$*";
 
         public string Source
         {
@@ -180,6 +190,16 @@ namespace RcloneDriveManager
         public string PageUrl { get; set; }
     }
 
+    public sealed class WorkspaceWatchState
+    {
+        public string ProfileId { get; set; }
+        public string ProfileName { get; set; }
+        public string LocalDir { get; set; }
+        public FileSystemWatcher Watcher { get; set; }
+        public readonly Dictionary<string, System.Threading.Timer> Timers = new Dictionary<string, System.Threading.Timer>(StringComparer.OrdinalIgnoreCase);
+        public readonly object SyncRoot = new object();
+    }
+
     public sealed class CapacityInfo
     {
         public string Text { get; set; }
@@ -233,7 +253,7 @@ namespace RcloneDriveManager
     {
         private const string AppUpdateCommitApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/commits/main";
         private const string AppUpdateReleaseApiUrl = "https://api.github.com/repos/luffyorhuymv/rclone-gui/releases/latest";
-        private const string AppVersion = "1.0.57";
+        private const string AppVersion = "1.0.63";
         private const int MaxLogLines = 2000;
         private readonly string[] _args;
         private readonly string _appDir;
@@ -251,6 +271,7 @@ namespace RcloneDriveManager
         private readonly Dictionary<string, CapacityInfo> _capacityCache = new Dictionary<string, CapacityInfo>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _capacityRefreshPending = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly object _capacityLock = new object();
+        private readonly Dictionary<string, WorkspaceWatchState> _workspaceWatchers = new Dictionary<string, WorkspaceWatchState>(StringComparer.OrdinalIgnoreCase);
         private readonly List<Tuple<string, string, string>> _pendingLogLines = new List<Tuple<string, string, string>>();
         private Process _webUiProcess;
         private readonly Color _bg = Color.FromArgb(204, 209, 216);
@@ -282,8 +303,12 @@ namespace RcloneDriveManager
         private CheckBox autoMountBox;
         private CheckBox networkModeBox;
         private CheckBox tunnelEnabledBox;
+        private CheckBox codeWorkspaceAutoUploadBox;
+        private CheckBox codeWorkspaceSkipNewerRemoteBox;
         private NumericUpDown tunnelPortBox;
+        private NumericUpDown codeWorkspaceDelayBox;
         private TextBox tunnelCommandBox;
+        private TextBox codeWorkspaceIgnoreBox;
         private RichTextBox logBox;
         private ComboBox browseRemoteCombo;
         private TextBox browsePathBox;
@@ -305,12 +330,14 @@ namespace RcloneDriveManager
         private CheckBox configObscurePassBox;
         private CheckBox configRequireInternetBox;
         private Label configCheckLabel;
+        private Label codeWorkspaceStatusLabel;
         private Label liveLogLabel;
         private ToolTip driveActionTip;
         private string lastDriveActionTipText;
         private bool _loadingProfileFields;
         private bool _profileNameEditedByUser;
         private bool _changingProfileNameAutomatically;
+        private bool _newProfileDraft;
         private bool _connectionBusy;
         private string _connectionBusyText = "Đang kết nối";
         private int _connectionBusyStep;
@@ -364,6 +391,7 @@ namespace RcloneDriveManager
                     await MountAutoProfilesAsync(true);
                 else
                     await MountAutoProfilesAsync(false);
+                StartSavedCodeWorkspaceWatchers();
             };
             FormClosing += (s, e) =>
             {
@@ -371,7 +399,7 @@ namespace RcloneDriveManager
                 if (!_allowExit && e.CloseReason == CloseReason.UserClosing)
                 {
                     var choice = MessageBox.Show(
-                        "Ban muon an app xuong khay he thong de tiep tuc giu cac o mount?\n\nYes: An xuong tray\nNo: Thoat app\nCancel: Huy",
+                        "Bạn muốn ẩn app xuống khay hệ thống để tiếp tục giữ các ổ mount?\n\nYes: Ẩn xuống tray\nNo: Thoát app\nCancel: Hủy",
                         "RcloneDrive",
                         MessageBoxButtons.YesNoCancel,
                         MessageBoxIcon.Question);
@@ -456,6 +484,7 @@ namespace RcloneDriveManager
                     _trayMenu.Dispose();
                     _trayMenu = null;
                 }
+                StopAllCodeWorkspaceWatchers();
             }
             base.Dispose(disposing);
         }
@@ -722,11 +751,24 @@ namespace RcloneDriveManager
             configTabs.TabPages.Add(tunnelPage);
 
             var advancedPage = ConfigSectionPage("Nâng cao");
-            var advancedPanel = ConfigGrid(2);
+            var advancedPanel = ConfigGrid(6);
             advancedPage.Controls.Add(advancedPanel);
             extraArgsBox = new TextBox { Text = "", Height = 54, Multiline = true, ScrollBars = ScrollBars.Vertical };
             advancedPanel.Controls.Add(Wrap("Tham số rclone thêm", extraArgsBox), 0, 0);
             advancedPanel.SetColumnSpan(extraArgsBox.Parent, 2);
+            var workspaceChecks = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(0, 8, 0, 0), BackColor = _surface };
+            codeWorkspaceAutoUploadBox = new CheckBox { Text = "Code Workspace auto upload", Width = 230 };
+            codeWorkspaceSkipNewerRemoteBox = new CheckBox { Text = "Không ghi đè file host mới hơn", Width = 250, Checked = true };
+            workspaceChecks.Controls.Add(codeWorkspaceAutoUploadBox);
+            workspaceChecks.Controls.Add(codeWorkspaceSkipNewerRemoteBox);
+            advancedPanel.Controls.Add(workspaceChecks, 0, 1);
+            advancedPanel.SetColumnSpan(workspaceChecks, 2);
+            codeWorkspaceDelayBox = AddNumber(advancedPanel, "Delay upload (giây)", 2, 1, 60, 0, 2);
+            codeWorkspaceStatusLabel = new Label { Text = "Code Workspace: tắt", Dock = DockStyle.Fill, ForeColor = _muted, TextAlign = ContentAlignment.MiddleLeft, BackColor = _surface };
+            advancedPanel.Controls.Add(Wrap("Trạng thái", codeWorkspaceStatusLabel), 1, 2);
+            codeWorkspaceIgnoreBox = new TextBox { Text = DriveProfile.DefaultCodeWorkspaceIgnores, Height = 78, Multiline = true, ScrollBars = ScrollBars.Vertical };
+            advancedPanel.Controls.Add(Wrap("Bỏ qua khi auto upload", codeWorkspaceIgnoreBox), 0, 3);
+            advancedPanel.SetColumnSpan(codeWorkspaceIgnoreBox.Parent, 2);
             configTabs.TabPages.Add(advancedPage);
             return page;
         }
@@ -758,6 +800,7 @@ namespace RcloneDriveManager
             toolRow.Controls.Add(ActionButton("Tải về", async (s, e) => await DownloadRemoteToLocalAsync(), _surface, _text, 76));
             toolRow.Controls.Add(ActionButton("Đẩy lên", async (s, e) => await UploadLocalChangesAsync(), _primary, Color.White, 82));
             toolRow.Controls.Add(ActionButton("Mở local", (s, e) => OpenLocalWorkspace(), _surface, _text, 84));
+            toolRow.Controls.Add(ActionButton("Code WS", async (s, e) => await StartCodeWorkspaceModeAsync(), _success, Color.White, 86));
             toolRow.Controls.Add(ActionButton("OpenCode", (s, e) => OpenProjectInOpenCode(), _surface, _text, 92));
             toolRow.Controls.Add(ActionButton("Fix OC", (s, e) => AutoFixOpenCodeForSelectedProject(), _surface, _text, 76));
 
@@ -2386,9 +2429,9 @@ namespace RcloneDriveManager
                 if (!IsVersionNewer(update.Version, AppVersion))
                 {
                     TryDeleteDirectory(tempRoot);
-                    var message = "Khong cap nhat: GitHub dang co " + update.Version + ", khong moi hon ban dang chay v" + AppVersion + ".";
+                    var message = "Không cập nhật: GitHub đang có " + update.Version + ", không mới hơn bản đang chạy v" + AppVersion + ".";
                     AddLog(message, "WARN");
-                    if (manual) MessageBox.Show(message, "Cap nhat", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    if (manual) MessageBox.Show(message, "Cập nhật", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
                 AddLog("Tải file cập nhật từ GitHub...");
@@ -2481,11 +2524,11 @@ namespace RcloneDriveManager
                 var json = await client.DownloadStringTaskAsync(AppUpdateReleaseApiUrl);
                 var data = _json.DeserializeObject(json) as Dictionary<string, object>;
                 if (data == null)
-                    throw new InvalidOperationException("Khong doc duoc thong tin release moi nhat tu GitHub.");
+                    throw new InvalidOperationException("Không đọc được thông tin release mới nhất từ GitHub.");
 
                 var tag = GetJsonString(data, "tag_name");
                 if (string.IsNullOrWhiteSpace(tag))
-                    throw new InvalidOperationException("Release moi nhat khong co tag version.");
+                    throw new InvalidOperationException("Release mới nhất không có tag version.");
 
                 var assets = data.ContainsKey("assets") ? data["assets"] as object[] : null;
                 string exeUrl = "";
@@ -2503,9 +2546,9 @@ namespace RcloneDriveManager
                 }
 
                 if (string.IsNullOrWhiteSpace(exeUrl))
-                    throw new InvalidOperationException("Release " + tag + " khong co asset RcloneDrive.exe.");
+                    throw new InvalidOperationException("Release " + tag + " không có asset RcloneDrive.exe.");
 
-                AddLog("GitHub release moi nhat: " + tag);
+                AddLog("GitHub release mới nhất: " + tag);
                 return new AppUpdateInfo
                 {
                     Version = NormalizeVersionTag(tag),
@@ -2960,6 +3003,7 @@ namespace RcloneDriveManager
                 }
                 return;
             }
+            _newProfileDraft = false;
             _loadingProfileFields = true;
             try
             {
@@ -2982,6 +3026,11 @@ namespace RcloneDriveManager
                 tunnelPortBox.Value = Math.Max(tunnelPortBox.Minimum, Math.Min(tunnelPortBox.Maximum, p.TunnelLocalPort));
                 tunnelCommandBox.Text = p.TunnelCommand ?? "";
                 extraArgsBox.Text = p.ExtraArgs ?? "";
+                codeWorkspaceAutoUploadBox.Checked = p.CodeWorkspaceEnabled;
+                codeWorkspaceSkipNewerRemoteBox.Checked = p.CodeWorkspaceSkipNewerRemote;
+                codeWorkspaceDelayBox.Value = Math.Max(codeWorkspaceDelayBox.Minimum, Math.Min(codeWorkspaceDelayBox.Maximum, p.CodeWorkspaceDelaySeconds <= 0 ? 2 : p.CodeWorkspaceDelaySeconds));
+                codeWorkspaceIgnoreBox.Text = string.IsNullOrWhiteSpace(p.CodeWorkspaceIgnores) ? DriveProfile.DefaultCodeWorkspaceIgnores : p.CodeWorkspaceIgnores;
+                UpdateCodeWorkspaceStatusLabel(p);
                 _profileNameEditedByUser = !ShouldAutoReplaceProfileName(p.Name);
             }
             finally
@@ -3023,7 +3072,13 @@ namespace RcloneDriveManager
         private void SaveCurrentProfile()
         {
             var p = SelectedProfile;
-            if (p == null) return;
+            if (p == null)
+            {
+                if (_newProfileDraft && SelectedMountedDrive == null)
+                    CreateProfileFromCurrentFields(null, true, true);
+                return;
+            }
+            _newProfileDraft = false;
             p.Name = string.IsNullOrWhiteSpace(nameBox.Text) ? "Ổ đĩa" : nameBox.Text.Trim();
             p.Remote = Convert.ToString(remoteCombo.SelectedItem ?? remoteCombo.Text ?? "").Trim();
             p.RemotePath = DriveProfile.NormalizeRemotePath(pathBox.Text, p.Remote);
@@ -3049,6 +3104,13 @@ namespace RcloneDriveManager
             p.TunnelLocalPort = (int)tunnelPortBox.Value;
             p.TunnelCommand = tunnelCommandBox.Text.Trim();
             p.ExtraArgs = extraArgsBox.Text.Trim();
+            p.CodeWorkspaceEnabled = codeWorkspaceAutoUploadBox.Checked;
+            p.CodeWorkspaceSkipNewerRemote = codeWorkspaceSkipNewerRemoteBox.Checked;
+            p.CodeWorkspaceDelaySeconds = (int)codeWorkspaceDelayBox.Value;
+            p.CodeWorkspaceIgnores = string.IsNullOrWhiteSpace(codeWorkspaceIgnoreBox.Text) ? DriveProfile.DefaultCodeWorkspaceIgnores : codeWorkspaceIgnoreBox.Text.Trim();
+            if (!p.CodeWorkspaceEnabled && IsCodeWorkspaceWatcherRunning(p))
+                StopCodeWorkspaceWatcher(p);
+            UpdateCodeWorkspaceStatusLabel(p);
             SaveProfiles();
             RenderProfiles();
             SelectProfile(p);
@@ -3072,41 +3134,47 @@ namespace RcloneDriveManager
 
         private void NewProfile()
         {
-            var remote = Convert.ToString(remoteCombo.SelectedItem ?? remoteCombo.Text ?? "").Trim();
-            if (string.IsNullOrWhiteSpace(remote))
-                remote = _remotes.FirstOrDefault() ?? "";
-            var baseName = string.IsNullOrWhiteSpace(nameBox.Text)
-                ? (string.IsNullOrWhiteSpace(remote) ? "Ổ" : remote.TrimEnd(':'))
-                : nameBox.Text.Trim();
-            var p = new DriveProfile
+            StartNewProfileDraft();
+        }
+
+        private void StartNewProfileDraft()
+        {
+            _newProfileDraft = true;
+            profileList.SelectedItems.Clear();
+            _loadingProfileFields = true;
+            try
             {
-                Name = UniqueProfileName(baseName),
-                Remote = remote,
-                RemotePath = DriveProfile.NormalizeRemotePath(pathBox.Text, remote),
-                DriveLetter = GetFreeDriveLetters().FirstOrDefault() ?? "Z:",
-                CacheMode = Convert.ToString(cacheModeCombo.SelectedItem ?? "full"),
-                CacheDir = cacheDirBox.Text.Trim(),
-                LocalWorkDir = GetDefaultLocalWorkDir(baseName),
-                VfsCacheMaxAge = string.IsNullOrWhiteSpace(cacheMaxAgeBox.Text) ? "72h" : cacheMaxAgeBox.Text.Trim(),
-                VfsWriteBack = string.IsNullOrWhiteSpace(writeBackBox.Text) ? "5s" : writeBackBox.Text.Trim(),
-                ReadOnly = readOnlyBox.Checked,
-                AutoMount = autoMountBox.Checked,
-                NetworkMode = networkModeBox.Checked,
-                Transfers = (int)transfersBox.Value,
-                BufferSizeMb = (int)bufferBox.Value,
-                MountPreset = Convert.ToString(mountPresetCombo.SelectedItem ?? mountPresetCombo.Text ?? "Nhanh/RaiDrive"),
-                TunnelEnabled = tunnelEnabledBox.Checked,
-                TunnelHostname = "",
-                TunnelLocalPort = (int)tunnelPortBox.Value,
-                TunnelCommand = tunnelCommandBox.Text.Trim(),
-                ExtraArgs = extraArgsBox.Text.Trim()
-            };
-            ApplyTunnelDefaultsForNewProfile(p, "Tạo profile mới");
-            _profiles.Add(p);
-            SaveProfiles();
-            RenderProfiles();
-            SelectProfile(p);
-            AddLog("Đã tạo profile mới: " + p.Name + " dùng " + p.Remote + p.RemotePath + " -> " + p.DriveLetter);
+                nameBox.Text = "";
+                remoteCombo.SelectedIndex = -1;
+                pathBox.Text = "/";
+                SelectComboValue(driveCombo, "Tự chọn ổ trống");
+                SelectComboValue(cacheModeCombo, "full");
+                cacheDirBox.Text = "%USERPROFILE%\\.cache\\rclone";
+                cacheMaxAgeBox.Text = "72h";
+                writeBackBox.Text = "5s";
+                SelectComboValue(mountPresetCombo, "Nhanh/RaiDrive");
+                readOnlyBox.Checked = false;
+                autoMountBox.Checked = false;
+                networkModeBox.Checked = true;
+                transfersBox.Value = Math.Max(transfersBox.Minimum, Math.Min(transfersBox.Maximum, 4));
+                bufferBox.Value = Math.Max(bufferBox.Minimum, Math.Min(bufferBox.Maximum, 32));
+                tunnelEnabledBox.Checked = false;
+                tunnelPortBox.Value = 0;
+                tunnelCommandBox.Text = "";
+                extraArgsBox.Text = "";
+                codeWorkspaceAutoUploadBox.Checked = false;
+                codeWorkspaceSkipNewerRemoteBox.Checked = true;
+                codeWorkspaceDelayBox.Value = Math.Max(codeWorkspaceDelayBox.Minimum, Math.Min(codeWorkspaceDelayBox.Maximum, 2));
+                codeWorkspaceIgnoreBox.Text = DriveProfile.DefaultCodeWorkspaceIgnores;
+                codeWorkspaceStatusLabel.Text = "Code Workspace: tắt";
+                _profileNameEditedByUser = false;
+            }
+            finally
+            {
+                _loadingProfileFields = false;
+            }
+            statusLabel.Text = "Đang tạo ổ mới: nhập tên và chọn remote";
+            AddLog("Đã mở form ổ mới. Hãy nhập tên profile và chọn remote/config trước khi lưu hoặc kết nối.");
         }
 
         private string UniqueProfileName(string baseName)
@@ -3134,6 +3202,7 @@ namespace RcloneDriveManager
             }
             if (MessageBox.Show("Xóa profile \"" + p.Name + "\" khỏi app? Rclone config " + p.Remote + " vẫn được giữ lại.", "Xóa profile", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
                 return;
+            StopCodeWorkspaceWatcher(p);
             _profiles.Remove(p);
             SaveProfiles();
             RenderProfiles();
@@ -3309,7 +3378,7 @@ namespace RcloneDriveManager
             subPath = subPath.Trim().Trim('\\', '/').Replace('/', '\\');
             if (string.IsNullOrWhiteSpace(subPath))
             {
-                MessageBox.Show("Khong mo truc tiep goc o mount. Hay nhap thu muc project cu the, vi du: public_html", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Không mở trực tiếp gốc ổ mount. Hãy nhập thư mục project cụ thể, ví dụ: public_html", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
@@ -3515,14 +3584,14 @@ namespace RcloneDriveManager
                 RunGit(projectDir, "config user.email \"rclonedrive@local\"");
 
                 if (RunGit(projectDir, "commit --allow-empty -m \"Initialize repository\""))
-                    AddLog("Da khoi tao Git cho OpenCode: " + projectDir);
+                    AddLog("Đã khởi tạo Git cho OpenCode: " + projectDir);
                 else
-                    AddLog("Da git init nhung chua tao duoc commit dau tien: " + projectDir, "WARN");
+                    AddLog("Đã git init nhưng chưa tạo được commit đầu tiên: " + projectDir, "WARN");
                 EnsureOpenCodeWorkspaceVcs(projectDir);
             }
             catch (Exception ex)
             {
-                AddLog("Khong tu khoi tao duoc Git cho OpenCode: " + ex.Message, "WARN");
+                AddLog("Không tự khởi tạo được Git cho OpenCode: " + ex.Message, "WARN");
             }
         }
 
@@ -3564,7 +3633,7 @@ namespace RcloneDriveManager
                     if (proc.ExitCode != 0)
                     {
                         var detail = string.IsNullOrWhiteSpace(error) ? output : error;
-                        if (logErrors) AddLog("Git loi: git " + arguments + " | " + detail.Trim(), "WARN");
+                        if (logErrors) AddLog("Git lỗi: git " + arguments + " | " + detail.Trim(), "WARN");
                         return false;
                     }
                     return true;
@@ -3572,7 +3641,7 @@ namespace RcloneDriveManager
             }
             catch (Exception ex)
             {
-                if (logErrors) AddLog("Khong chay duoc git.exe: " + ex.Message, "WARN");
+                if (logErrors) AddLog("Không chạy được git.exe: " + ex.Message, "WARN");
                 return false;
             }
         }
@@ -3948,7 +4017,8 @@ namespace RcloneDriveManager
                 return;
             }
             AddLog("Đẩy thay đổi lên host [" + p.Name + "]: " + localDir + " -> " + p.Source);
-            var output = await RunCaptureAsync(
+            var args = new List<string>
+            {
                 "copy",
                 localDir,
                 p.Source,
@@ -3956,11 +4026,269 @@ namespace RcloneDriveManager
                 "--transfers", "2",
                 "--checkers", "1",
                 "--exclude", ".git",
-                "--exclude", ".git/**");
+                "--exclude", ".git/**"
+            };
+            ApplyHostingSafeTransferArgs(args, p);
+            var output = await RunCaptureAsync(args.ToArray());
             if (LooksLikeNoTransfer(output))
                 AddLog("Không có file mới cần đẩy cho profile " + p.Name + ".", "WARN");
             else
                 AddLog("Đã chạy đẩy lên host cho profile " + p.Name + ".");
+        }
+
+        private async Task StartCodeWorkspaceModeAsync()
+        {
+            SaveCurrentProfile();
+            var p = SelectedProfile;
+            if (p == null)
+            {
+                MessageBox.Show("Hãy chọn một profile trước.", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (IsCodeWorkspaceWatcherRunning(p))
+            {
+                StopCodeWorkspaceWatcher(p);
+                p.CodeWorkspaceEnabled = false;
+                if (codeWorkspaceAutoUploadBox != null) codeWorkspaceAutoUploadBox.Checked = false;
+                SaveProfiles();
+                UpdateCodeWorkspaceStatusLabel(p);
+                AddLog("Code Workspace đã tắt cho " + p.Name + ".");
+                return;
+            }
+
+            if (RepairProfileLocalWorkDir(p)) SaveProfiles();
+            EnsureLocalWorkspace(p);
+            var localDir = NormalizeLocalWorkDir(p);
+            if (!HasUploadableLocalFile(localDir))
+            {
+                AddLog("Code Workspace: local đang trống, tải host về máy trước khi bật watcher.");
+                await DownloadRemoteToLocalAsync();
+            }
+
+            p.CodeWorkspaceEnabled = true;
+            p.CodeWorkspaceDelaySeconds = codeWorkspaceDelayBox == null ? 2 : (int)codeWorkspaceDelayBox.Value;
+            p.CodeWorkspaceSkipNewerRemote = codeWorkspaceSkipNewerRemoteBox == null || codeWorkspaceSkipNewerRemoteBox.Checked;
+            p.CodeWorkspaceIgnores = codeWorkspaceIgnoreBox == null || string.IsNullOrWhiteSpace(codeWorkspaceIgnoreBox.Text)
+                ? DriveProfile.DefaultCodeWorkspaceIgnores
+                : codeWorkspaceIgnoreBox.Text.Trim();
+            if (codeWorkspaceAutoUploadBox != null) codeWorkspaceAutoUploadBox.Checked = true;
+            SaveProfiles();
+
+            EnsureGitSafeSettingsForWorkspace(localDir);
+            StartCodeWorkspaceWatcher(p);
+            OpenLocalWorkspace();
+            AddLog("Code Workspace đã bật cho " + p.Name + ": " + localDir + " -> " + p.Source);
+        }
+
+        private bool IsCodeWorkspaceWatcherRunning(DriveProfile p)
+        {
+            return p != null && _workspaceWatchers.ContainsKey(p.Id ?? "");
+        }
+
+        private void StartCodeWorkspaceWatcher(DriveProfile p)
+        {
+            if (p == null) return;
+            StopCodeWorkspaceWatcher(p);
+            var localDir = NormalizeLocalWorkDir(p);
+            if (string.IsNullOrWhiteSpace(localDir) || !Directory.Exists(localDir))
+            {
+                AddLog("Code Workspace không thấy thư mục local: " + localDir, "ERROR");
+                return;
+            }
+
+            var watcher = new FileSystemWatcher(localDir)
+            {
+                IncludeSubdirectories = true,
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.CreationTime,
+                EnableRaisingEvents = true
+            };
+            var state = new WorkspaceWatchState
+            {
+                ProfileId = p.Id,
+                ProfileName = p.Name,
+                LocalDir = localDir,
+                Watcher = watcher
+            };
+            FileSystemEventHandler fileHandler = (s, e) => ScheduleCodeWorkspaceUpload(state, e.FullPath, e.ChangeType);
+            RenamedEventHandler renameHandler = (s, e) => ScheduleCodeWorkspaceUpload(state, e.FullPath, e.ChangeType);
+            watcher.Changed += fileHandler;
+            watcher.Created += fileHandler;
+            watcher.Renamed += renameHandler;
+            watcher.Deleted += (s, e) => AddLog("Code Workspace [" + p.Name + "]: file đã xóa local, chưa tự xóa trên host: " + SafeRelativePath(localDir, e.FullPath), "WARN");
+            _workspaceWatchers[p.Id ?? ""] = state;
+            UpdateCodeWorkspaceStatusLabel(p);
+        }
+
+        private void StopCodeWorkspaceWatcher(DriveProfile p)
+        {
+            if (p == null) return;
+            WorkspaceWatchState state;
+            if (!_workspaceWatchers.TryGetValue(p.Id ?? "", out state)) return;
+            _workspaceWatchers.Remove(p.Id ?? "");
+            try
+            {
+                if (state.Watcher != null)
+                {
+                    state.Watcher.EnableRaisingEvents = false;
+                    state.Watcher.Dispose();
+                }
+            }
+            catch { }
+            lock (state.SyncRoot)
+            {
+                foreach (var timer in state.Timers.Values)
+                    try { timer.Dispose(); } catch { }
+                state.Timers.Clear();
+            }
+            UpdateCodeWorkspaceStatusLabel(p);
+        }
+
+        private void StopAllCodeWorkspaceWatchers()
+        {
+            foreach (var id in _workspaceWatchers.Keys.ToList())
+            {
+                var p = _profiles.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
+                if (p != null) StopCodeWorkspaceWatcher(p);
+            }
+        }
+
+        private void StartSavedCodeWorkspaceWatchers()
+        {
+            foreach (var p in _profiles.Where(x => x.CodeWorkspaceEnabled).ToList())
+            {
+                try
+                {
+                    var localDir = NormalizeLocalWorkDir(p);
+                    if (!Directory.Exists(localDir))
+                    {
+                        AddLog("Code Workspace [" + p.Name + "]: bỏ qua auto start vì chưa có local: " + localDir, "WARN");
+                        continue;
+                    }
+                    EnsureGitSafeSettingsForWorkspace(localDir);
+                    StartCodeWorkspaceWatcher(p);
+                    AddLog("Code Workspace tự bật lại: " + p.Name);
+                }
+                catch (Exception ex)
+                {
+                    AddLog("Code Workspace không tự bật lại được cho " + p.Name + ": " + ex.Message, "WARN");
+                }
+            }
+        }
+
+        private void ScheduleCodeWorkspaceUpload(WorkspaceWatchState state, string fullPath, WatcherChangeTypes changeType)
+        {
+            if (state == null || string.IsNullOrWhiteSpace(fullPath)) return;
+            if (changeType == WatcherChangeTypes.Deleted) return;
+            var p = _profiles.FirstOrDefault(x => string.Equals(x.Id, state.ProfileId, StringComparison.OrdinalIgnoreCase));
+            if (p == null || !p.CodeWorkspaceEnabled) return;
+            if (Directory.Exists(fullPath)) return;
+            if (IsIgnoredCodeWorkspacePath(p, state.LocalDir, fullPath)) return;
+
+            var delay = Math.Max(1, p.CodeWorkspaceDelaySeconds <= 0 ? 2 : p.CodeWorkspaceDelaySeconds);
+            lock (state.SyncRoot)
+            {
+                System.Threading.Timer oldTimer;
+                if (state.Timers.TryGetValue(fullPath, out oldTimer))
+                {
+                    try { oldTimer.Dispose(); } catch { }
+                    state.Timers.Remove(fullPath);
+                }
+
+                System.Threading.Timer timer = null;
+                timer = new System.Threading.Timer(_ =>
+                {
+                    lock (state.SyncRoot)
+                    {
+                        state.Timers.Remove(fullPath);
+                    }
+                    try { timer.Dispose(); } catch { }
+                    Task.Run(async () => await UploadCodeWorkspaceFileAsync(state.ProfileId, fullPath));
+                }, null, TimeSpan.FromSeconds(delay), Timeout.InfiniteTimeSpan);
+                state.Timers[fullPath] = timer;
+            }
+        }
+
+        private async Task UploadCodeWorkspaceFileAsync(string profileId, string fullPath)
+        {
+            var p = _profiles.FirstOrDefault(x => string.Equals(x.Id, profileId, StringComparison.OrdinalIgnoreCase));
+            if (p == null || !p.CodeWorkspaceEnabled) return;
+            var localDir = NormalizeLocalWorkDir(p);
+            if (!File.Exists(fullPath) || IsIgnoredCodeWorkspacePath(p, localDir, fullPath)) return;
+            if (!await WaitForStableFileAsync(fullPath)) return;
+
+            var relative = SafeRelativePath(localDir, fullPath);
+            if (string.IsNullOrWhiteSpace(relative)) return;
+            var remoteTarget = JoinRemoteSource(p.Source, relative.Replace('\\', '/'));
+
+            if (p.CodeWorkspaceSkipNewerRemote && await RemoteFileLooksNewerAsync(remoteTarget, fullPath))
+            {
+                AddLog("Code Workspace [" + p.Name + "]: bỏ qua upload vì host mới hơn: " + relative, "WARN");
+                return;
+            }
+
+            AddLog("Code Workspace [" + p.Name + "]: upload " + relative);
+            var output = await RunCaptureSensitiveAsync(
+                new[] { "copyto", fullPath, remoteTarget, "--transfers", "1", "--checkers", "1" },
+                "rclone copyto " + QuoteIfNeeded(fullPath) + " " + QuoteIfNeeded(remoteTarget));
+            if (LooksLikeTransferError(output))
+                AddLog("Code Workspace [" + p.Name + "]: upload có lỗi, xem log rclone phía trên: " + relative, "ERROR");
+            else
+                AddLog("Code Workspace [" + p.Name + "]: đã upload " + relative);
+        }
+
+        private async Task<bool> WaitForStableFileAsync(string file)
+        {
+            try
+            {
+                long lastLength = -1;
+                DateTime lastWrite = DateTime.MinValue;
+                for (var i = 0; i < 8; i++)
+                {
+                    if (!File.Exists(file)) return false;
+                    var info = new FileInfo(file);
+                    if (info.Length == lastLength && info.LastWriteTimeUtc == lastWrite)
+                    {
+                        using (File.Open(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                            return true;
+                    }
+                    lastLength = info.Length;
+                    lastWrite = info.LastWriteTimeUtc;
+                    await Task.Delay(350);
+                }
+            }
+            catch (Exception ex)
+            {
+                AddLog("Code Workspace: file chưa sẵn sàng để upload: " + file + " | " + ex.Message, "WARN");
+            }
+            return false;
+        }
+
+        private async Task<bool> RemoteFileLooksNewerAsync(string remoteTarget, string localFile)
+        {
+            try
+            {
+                var output = await RunRcloneNoLogAsync("lsl", remoteTarget);
+                if (string.IsNullOrWhiteSpace(output)) return false;
+                var match = Regex.Match(output, @"\s(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})");
+                if (!match.Success) return false;
+                DateTime remoteLocal;
+                if (!DateTime.TryParse(match.Groups[1].Value + " " + match.Groups[2].Value, out remoteLocal)) return false;
+                var local = File.GetLastWriteTime(localFile);
+                return remoteLocal > local.AddSeconds(2);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool LooksLikeTransferError(string output)
+        {
+            var text = output ?? "";
+            return text.IndexOf("ERROR", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   text.IndexOf("Failed", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   text.IndexOf("permission denied", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private bool HasUploadableLocalFile(string localDir)
@@ -4003,6 +4331,82 @@ namespace RcloneDriveManager
             catch
             {
                 return false;
+            }
+        }
+
+        private string SafeRelativePath(string rootDir, string path)
+        {
+            try
+            {
+                var root = Path.GetFullPath(rootDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                var full = Path.GetFullPath(path);
+                if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return "";
+                return full.Substring(root.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
+        private bool IsIgnoredCodeWorkspacePath(DriveProfile p, string rootDir, string path)
+        {
+            var relative = SafeRelativePath(rootDir, path).Replace('\\', '/').TrimStart('/');
+            if (string.IsNullOrWhiteSpace(relative)) return true;
+            var ignoreText = string.IsNullOrWhiteSpace(p == null ? "" : p.CodeWorkspaceIgnores)
+                ? DriveProfile.DefaultCodeWorkspaceIgnores
+                : p.CodeWorkspaceIgnores;
+            foreach (var raw in Regex.Split(ignoreText ?? "", @"[;\r\n,]+"))
+            {
+                var pattern = (raw ?? "").Trim().Replace('\\', '/').TrimStart('/');
+                if (string.IsNullOrWhiteSpace(pattern)) continue;
+                if (pattern.EndsWith("/**", StringComparison.Ordinal))
+                {
+                    var prefix = pattern.Substring(0, pattern.Length - 3).TrimEnd('/');
+                    if (relative.Equals(prefix, StringComparison.OrdinalIgnoreCase) ||
+                        relative.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                    continue;
+                }
+                if (pattern.IndexOf('*') >= 0 || pattern.IndexOf('?') >= 0)
+                {
+                    var regex = "^" + Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\?", ".") + "$";
+                    if (Regex.IsMatch(relative, regex, RegexOptions.IgnoreCase) ||
+                        Regex.IsMatch(Path.GetFileName(relative), regex, RegexOptions.IgnoreCase))
+                        return true;
+                    continue;
+                }
+                if (relative.Equals(pattern, StringComparison.OrdinalIgnoreCase) ||
+                    relative.EndsWith("/" + pattern, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        private void UpdateCodeWorkspaceStatusLabel(DriveProfile p)
+        {
+            if (codeWorkspaceStatusLabel == null) return;
+            var running = IsCodeWorkspaceWatcherRunning(p);
+            var enabled = p != null && p.CodeWorkspaceEnabled;
+            codeWorkspaceStatusLabel.Text = running
+                ? "Code Workspace: đang theo dõi local và auto upload"
+                : (enabled ? "Code Workspace: đã bật trong profile, bấm Code WS để chạy" : "Code Workspace: tắt");
+            codeWorkspaceStatusLabel.ForeColor = running ? _success : _muted;
+        }
+
+        private void EnsureGitSafeSettingsForWorkspace(string localDir)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(localDir) || !Directory.Exists(Path.Combine(localDir, ".git"))) return;
+                RunGit(localDir, "config core.fscache false", false);
+                RunGit(localDir, "config core.trustctime false", false);
+                RunGit(localDir, "config core.checkstat minimal", false);
+                AddLog("Đã áp dụng Git safe settings cho Code Workspace: " + localDir);
+            }
+            catch (Exception ex)
+            {
+                AddLog("Không áp dụng được Git safe settings: " + ex.Message, "WARN");
             }
         }
 
@@ -4305,6 +4709,7 @@ namespace RcloneDriveManager
 
         private void SelectProfile(DriveProfile profile)
         {
+            if (profile != null) _newProfileDraft = false;
             foreach (ListViewItem item in profileList.Items)
             {
                 if (ReferenceEquals(item.Tag, profile))
@@ -4320,11 +4725,11 @@ namespace RcloneDriveManager
         {
             if (!File.Exists(_rcloneExe))
             {
-                statusLabel.Text = "rclone.exe not found";
-                AddLog("Cannot find rclone.exe in " + _appDir, "ERROR");
+                statusLabel.Text = "Không thấy rclone.exe";
+                AddLog("Không tìm thấy rclone.exe trong " + _appDir, "ERROR");
                 return;
             }
-            statusLabel.Text = "Refreshing remotes...";
+            statusLabel.Text = "Đang làm mới remotes...";
             var output = await RunCaptureAsync("listremotes");
             _remotes.Clear();
             _remotes.AddRange(output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).Where(s => s.Length > 0));
@@ -4355,7 +4760,7 @@ namespace RcloneDriveManager
                 combo.Items.Clear();
                 foreach (var r in remoteItems) combo.Items.Add(r);
                 if (!string.IsNullOrEmpty(old)) SelectComboValue(combo, old);
-                if (combo.SelectedIndex < 0 && combo.Items.Count > 0) combo.SelectedIndex = 0;
+                if (combo.SelectedIndex < 0 && combo.Items.Count > 0 && !(combo == remoteCombo && _newProfileDraft)) combo.SelectedIndex = 0;
             }
             LoadSelectedProfileIntoFields();
         }
@@ -4682,11 +5087,19 @@ namespace RcloneDriveManager
             var remote = Convert.ToString(remoteCombo.SelectedItem ?? remoteCombo.Text ?? "").Trim();
             if (string.IsNullOrWhiteSpace(remote))
             {
-                AddLog("Hãy chọn remote trước khi kết nối.", "ERROR");
+                AddLog("Hãy chọn remote/config trước khi lưu hoặc kết nối.", "ERROR");
+                MessageBox.Show("Hãy chọn remote/config trước khi lưu hoặc kết nối.", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 SelectTab("Ổ đĩa");
                 return null;
             }
-            var typedName = string.IsNullOrWhiteSpace(nameBox.Text) ? remote.TrimEnd(':') : nameBox.Text.Trim();
+            var typedName = (nameBox.Text ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(typedName))
+            {
+                AddLog("Hãy nhập tên profile trước khi lưu hoặc kết nối.", "ERROR");
+                MessageBox.Show("Hãy nhập tên profile trước khi lưu hoặc kết nối.", "RcloneDrive", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                SelectTab("Ổ đĩa");
+                return null;
+            }
             var p = new DriveProfile
             {
                 Name = string.IsNullOrWhiteSpace(forcedName)
@@ -4707,14 +5120,19 @@ namespace RcloneDriveManager
                 Transfers = (int)transfersBox.Value,
                 BufferSizeMb = (int)bufferBox.Value,
                 MountPreset = Convert.ToString(mountPresetCombo.SelectedItem ?? mountPresetCombo.Text ?? "Nhanh/RaiDrive"),
-                TunnelEnabled = tunnelEnabledBox.Checked,
+                TunnelEnabled = false,
                 TunnelHostname = "",
                 TunnelLocalPort = (int)tunnelPortBox.Value,
-                TunnelCommand = tunnelCommandBox.Text.Trim(),
-                ExtraArgs = extraArgsBox.Text.Trim()
+                TunnelCommand = "",
+                ExtraArgs = extraArgsBox.Text.Trim(),
+                CodeWorkspaceEnabled = codeWorkspaceAutoUploadBox.Checked,
+                CodeWorkspaceSkipNewerRemote = codeWorkspaceSkipNewerRemoteBox.Checked,
+                CodeWorkspaceDelaySeconds = (int)codeWorkspaceDelayBox.Value,
+                CodeWorkspaceIgnores = string.IsNullOrWhiteSpace(codeWorkspaceIgnoreBox.Text) ? DriveProfile.DefaultCodeWorkspaceIgnores : codeWorkspaceIgnoreBox.Text.Trim()
             };
             ApplyTunnelDefaultsForNewProfile(p, "Tạo profile từ form");
             _profiles.Add(p);
+            _newProfileDraft = false;
             SaveProfiles();
             RenderProfiles();
             SelectProfile(p);
@@ -4733,44 +5151,12 @@ namespace RcloneDriveManager
         private void ApplyTunnelDefaultsForNewProfile(DriveProfile profile, string context)
         {
             if (profile == null) return;
-            var remote = (profile.Remote ?? "").Trim();
-            var uiEnabled = tunnelEnabledBox != null && tunnelEnabledBox.Checked;
-            var uiCommand = tunnelCommandBox == null ? "" : (tunnelCommandBox.Text ?? "").Trim();
             var uiPort = tunnelPortBox == null ? 0 : (int)tunnelPortBox.Value;
 
-            if (uiEnabled || !string.IsNullOrWhiteSpace(uiCommand))
-            {
-                profile.TunnelEnabled = uiEnabled;
-                profile.TunnelCommand = uiCommand;
-                profile.TunnelLocalPort = uiPort;
-                AddLog(context + ": đã áp dụng Cloudflare tunnel từ UI cho " + profile.Name + ".", "TUNNEL");
-                return;
-            }
-
-            var sameRemote = _profiles.FirstOrDefault(x =>
-                !ReferenceEquals(x, profile) &&
-                string.Equals((x.Remote ?? "").Trim(), remote, StringComparison.OrdinalIgnoreCase) &&
-                (x.TunnelEnabled || !string.IsNullOrWhiteSpace(x.TunnelCommand) || !string.IsNullOrWhiteSpace(x.TunnelHostname)));
-            if (sameRemote != null)
-            {
-                profile.TunnelEnabled = true;
-                profile.TunnelHostname = sameRemote.TunnelHostname ?? "";
-                profile.TunnelLocalPort = sameRemote.TunnelLocalPort;
-                profile.TunnelCommand = sameRemote.TunnelCommand ?? "";
-                AddLog(context + ": tự bật Cloudflare tunnel theo profile cùng remote " + sameRemote.Name + ".", "TUNNEL");
-                return;
-            }
-
-            var legacyHost = ResolveTunnelHostnameFromLegacyProfile(profile);
-            if (!string.IsNullOrWhiteSpace(legacyHost))
-            {
-                profile.TunnelEnabled = true;
-                profile.TunnelHostname = legacyHost;
-                profile.TunnelLocalPort = uiPort;
-                AddLog(context + ": tự bật Cloudflare tunnel từ profile tunnel cũ: " + legacyHost, "TUNNEL");
-                return;
-            }
-
+            profile.TunnelEnabled = false;
+            profile.TunnelCommand = "";
+            profile.TunnelHostname = "";
+            profile.TunnelLocalPort = uiPort;
             AddLog(context + ": Cloudflare tunnel chưa bật cho profile " + profile.Name + ".", "TUNNEL");
         }
 
@@ -4779,6 +5165,13 @@ namespace RcloneDriveManager
             if (p == null) return true;
             if (!p.TunnelEnabled && string.IsNullOrWhiteSpace(p.TunnelCommand))
             {
+                var currentHost = GetRemoteConfigValue(p.Remote, "host");
+                var currentPort = GetRemoteConfigValue(p.Remote, "port");
+                if (IsLocalTunnelHost(currentHost))
+                {
+                    AddLog("Remote " + p.Remote + " đang trỏ tới " + currentHost + ":" + currentPort + " nhưng Cloudflare tunnel chưa bật. Hãy sửa lại host thật trong config hoặc bật Mount Cloudflare tunnel.", "ERROR");
+                    return false;
+                }
                 AddLog("Cloudflare tunnel chưa bật, bỏ qua bước mở tunnel cho " + p.Name + ".", "TUNNEL");
                 return true;
             }
@@ -4787,7 +5180,7 @@ namespace RcloneDriveManager
                 var originalHost = ResolveTunnelHostnameFromRemote(p);
                 if (string.IsNullOrWhiteSpace(originalHost))
                 {
-                    AddLog("Da tick Mount Cloudflare tunnel nhung khong lay duoc hostname tu rclone config.", "ERROR");
+                    AddLog("Đã tick Mount Cloudflare tunnel nhưng không lấy được hostname từ rclone config.", "ERROR");
                     return false;
                 }
                 p.TunnelHostname = originalHost;
@@ -4807,7 +5200,7 @@ namespace RcloneDriveManager
             var hasEndpoint = TryExtractTunnelEndpoint(command, out host, out port);
             if (hasEndpoint && IsTcpPortOpen(host, port, 700))
             {
-                AddLog("Tunnel da san sang: " + host + ":" + port);
+                AddLog("Tunnel đã sẵn sàng: " + host + ":" + port);
                 return true;
             }
 
@@ -4815,13 +5208,13 @@ namespace RcloneDriveManager
             Process existing;
             if (_tunnels.TryGetValue(key, out existing) && existing != null && !existing.HasExited)
             {
-                AddLog("Tunnel dang chay cho profile: " + p.Name);
+                AddLog("Tunnel đang chạy cho profile: " + p.Name);
             }
             else
             {
                 try
                 {
-                    AddLog("[" + p.Name + "] Dang khoi tao ket noi tunnel...");
+                    AddLog("[" + p.Name + "] Đang khởi tạo kết nối tunnel...");
                     AddLog("[CMD] [" + p.Name + "] " + command);
                     var psi = new ProcessStartInfo
                     {
@@ -4835,20 +5228,20 @@ namespace RcloneDriveManager
                     var proc = Process.Start(psi);
                     if (proc == null)
                     {
-                        AddLog("Khong start duoc tunnel command.", "ERROR");
+                        AddLog("Không start được tunnel command.", "ERROR");
                         return false;
                     }
                     proc.EnableRaisingEvents = true;
                     proc.OutputDataReceived += (s, e) => { if (e.Data != null) AddLog("[" + p.Name + "] " + e.Data, "TUNNEL"); };
                     proc.ErrorDataReceived += (s, e) => { if (e.Data != null) AddLog("[" + p.Name + "] " + e.Data, "TUNNEL"); };
-                    proc.Exited += (s, e) => AddLog("Tunnel exited for " + p.Name + " code " + SafeExitCode(proc), "WARN");
+                    proc.Exited += (s, e) => AddLog("Tunnel đã dừng cho " + p.Name + ", code " + SafeExitCode(proc), "WARN");
                     proc.BeginOutputReadLine();
                     proc.BeginErrorReadLine();
                     _tunnels[key] = proc;
                 }
                 catch (Exception ex)
                 {
-                    AddLog("Khong start duoc tunnel: " + ex.Message, "ERROR");
+                    AddLog("Không start được tunnel: " + ex.Message, "ERROR");
                     return false;
                 }
             }
@@ -4864,13 +5257,13 @@ namespace RcloneDriveManager
             {
                 if (IsTcpPortOpen(host, port, 700))
                 {
-                    AddLog("Tunnel san sang: " + host + ":" + port);
+                    AddLog("Tunnel sẵn sàng: " + host + ":" + port);
                     return true;
                 }
                 await Task.Delay(500);
             }
 
-            AddLog("Tunnel chua mo port " + host + ":" + port + ". Kiem tra cloudflared/login Cloudflare Access.", "ERROR");
+            AddLog("Tunnel chưa mở port " + host + ":" + port + ". Kiểm tra cloudflared/login Cloudflare Access.", "ERROR");
             return false;
         }
 
@@ -4978,7 +5371,7 @@ namespace RcloneDriveManager
                     }
                     catch { }
                     SaveProfiles();
-                    AddLog("Da tu chon tunnel port: " + port);
+                    AddLog("Đã tự chọn tunnel port: " + port);
                     return port;
                 }
             }
@@ -4986,28 +5379,42 @@ namespace RcloneDriveManager
             return p.TunnelLocalPort;
         }
 
-        private async Task<bool> EnsureRcloneRemoteUsesTunnelAsync(DriveProfile p)
+        private Task<bool> EnsureRcloneRemoteUsesTunnelAsync(DriveProfile p)
         {
             try
             {
-                if (p == null || string.IsNullOrWhiteSpace(p.Remote)) return true;
+                if (p == null || string.IsNullOrWhiteSpace(p.Remote)) return Task.FromResult(true);
                 var command = BuildTunnelCommand(p);
                 string host;
                 int port;
-                if (!TryExtractTunnelEndpoint(command, out host, out port)) return true;
+                if (!TryExtractTunnelEndpoint(command, out host, out port)) return Task.FromResult(true);
                 var remoteName = p.Remote.Trim().TrimEnd(':');
-                if (string.IsNullOrWhiteSpace(remoteName)) return true;
-                AddLog("Cau hinh rclone remote " + remoteName + " dung tunnel " + host + ":" + port);
-                var result = await RunRcloneResultAsync(20000, "rclone config update " + remoteName + " host " + host + " port " + port, "config", "update", remoteName, "host", host, "port", Convert.ToString(port));
-                if (result.ExitCode == 0) return true;
-                AddLog("Khong cap nhat duoc rclone remote sang tunnel. Exit code: " + result.ExitCode, "ERROR");
-                return false;
+                if (string.IsNullOrWhiteSpace(remoteName)) return Task.FromResult(true);
+                AddLog("Remote " + remoteName + " sẽ dùng tunnel tạm thời " + host + ":" + port + " cho process này; rclone.conf được giữ nguyên.", "TUNNEL");
+                return Task.FromResult(true);
             }
             catch (Exception ex)
             {
-                AddLog("Khong cap nhat duoc remote tunnel: " + ex.Message, "ERROR");
-                return false;
+                AddLog("Không chuẩn bị được remote tunnel: " + ex.Message, "ERROR");
+                return Task.FromResult(false);
             }
+        }
+
+        private void ApplyTunnelEnvironment(ProcessStartInfo psi, DriveProfile p)
+        {
+            if (psi == null || p == null || string.IsNullOrWhiteSpace(p.Remote)) return;
+            if (!p.TunnelEnabled && string.IsNullOrWhiteSpace(p.TunnelCommand)) return;
+
+            string host;
+            int port;
+            if (!TryExtractTunnelEndpoint(BuildTunnelCommand(p), out host, out port)) return;
+
+            var remoteName = p.Remote.Trim().TrimEnd(':').ToUpperInvariant();
+            remoteName = Regex.Replace(remoteName, @"[^A-Z0-9_]", "_");
+            if (string.IsNullOrWhiteSpace(remoteName)) return;
+
+            psi.EnvironmentVariables["RCLONE_CONFIG_" + remoteName + "_HOST"] = host;
+            psi.EnvironmentVariables["RCLONE_CONFIG_" + remoteName + "_PORT"] = Convert.ToString(port);
         }
 
         private string FindCloudflaredExe()
@@ -5105,7 +5512,7 @@ namespace RcloneDriveManager
 
             WarnIfUnsafeRemoteRootMount(p);
 
-            var preflight = await TestRemoteBeforeMountAsync(p.Source);
+            var preflight = await TestRemoteBeforeMountAsync(p);
             if (!preflight)
             {
                 CleanupMountState(p, mountDrive);
@@ -5116,7 +5523,7 @@ namespace RcloneDriveManager
 
             var args = BuildMountArgs(p, mountDrive, SafeVolName(p, mountDrive));
             AddLog("Mount " + p.Source + " -> " + mountDrive);
-            var proc = StartRclone(args, false);
+            var proc = StartRclone(args, false, p);
             proc.EnableRaisingEvents = true;
             proc.OutputDataReceived += (s, e) => AddMountedRcloneLog(p, mountDrive, e.Data, "RCLONE");
             proc.ErrorDataReceived += (s, e) => AddMountedRcloneLog(p, mountDrive, e.Data, "RCLONE");
@@ -5401,24 +5808,37 @@ namespace RcloneDriveManager
             AddArgIfMissing(args, p.ExtraArgs, "--timeout", "2m");
             AddArgIfMissing(args, p.ExtraArgs, "--contimeout", "15s");
 
-            if (!HasExtraArg(p.ExtraArgs, "--exclude"))
+            AddHostingSystemExcludes(args);
+
+            if (IsRemoteRootPath(p))
             {
-                AddExcludePattern(args, ".ftpquota");
-                AddExcludePattern(args, "**/.ftpquota");
-                AddExcludePattern(args, ".user.ini");
-                AddExcludePattern(args, "**/.user.ini");
-                AddExcludePattern(args, ".well-known/acme-challenge/**");
-                AddExcludePattern(args, "**/.well-known/acme-challenge/**");
-                if (IsRemoteRootPath(p))
-                {
-                    AddExcludePattern(args, "www/server/panel/vhost/**");
-                    AddExcludePattern(args, "www/wwwlogs/**");
-                    AddExcludePattern(args, "proc/**");
-                    AddExcludePattern(args, "sys/**");
-                    AddExcludePattern(args, "dev/**");
-                    AddExcludePattern(args, "run/**");
-                }
+                AddExcludePattern(args, "www/server/panel/vhost/**");
+                AddExcludePattern(args, "www/wwwlogs/**");
+                AddExcludePattern(args, "proc/**");
+                AddExcludePattern(args, "sys/**");
+                AddExcludePattern(args, "dev/**");
+                AddExcludePattern(args, "run/**");
             }
+        }
+
+        private void ApplyHostingSafeTransferArgs(List<string> args, DriveProfile p)
+        {
+            var remoteType = GetRemoteType(p == null ? "" : p.Remote);
+            if (!(string.Equals(remoteType, "ftp", StringComparison.OrdinalIgnoreCase) ||
+                  string.Equals(remoteType, "sftp", StringComparison.OrdinalIgnoreCase)))
+                return;
+
+            AddHostingSystemExcludes(args);
+        }
+
+        private void AddHostingSystemExcludes(List<string> args)
+        {
+            AddExcludePattern(args, ".ftpquota");
+            AddExcludePattern(args, "**/.ftpquota");
+            AddExcludePattern(args, ".user.ini");
+            AddExcludePattern(args, "**/.user.ini");
+            AddExcludePattern(args, ".well-known/acme-challenge/**");
+            AddExcludePattern(args, "**/.well-known/acme-challenge/**");
         }
 
         private bool IsRemoteRootPath(DriveProfile p)
@@ -5454,10 +5874,11 @@ namespace RcloneDriveManager
                 args.Add(value);
         }
 
-        private async Task<bool> TestRemoteBeforeMountAsync(string source)
+        private async Task<bool> TestRemoteBeforeMountAsync(DriveProfile profile)
         {
+            var source = profile == null ? "" : profile.Source;
             AddLog("Kiểm tra remote trước khi mount: " + source);
-            var result = await RunRcloneResultAsync(45000, "rclone lsf " + source + " --max-depth 1", "lsf", source, "--max-depth", "1");
+            var result = await RunRcloneResultAsync(profile, 45000, "rclone lsf " + source + " --max-depth 1", "lsf", source, "--max-depth", "1");
             if (result.TimedOut)
             {
                 AddLog("Kiểm tra remote quá thời gian. Không mount để tránh app bị kẹt.", "ERROR");
@@ -5478,7 +5899,7 @@ namespace RcloneDriveManager
             if (text.IndexOf("Ftp Init Failed", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 text.IndexOf("\"WinErrorCode\":1237", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                return "FTP khởi tạo thất bại (Ftp Init Failed / 1237). Hay kiem tra host, port, user/pass, passive mode, firewall/SSL va so ket noi FTP cua host. Khong mount. Exit code: " + exitCode;
+                return "FTP khởi tạo thất bại (Ftp Init Failed / 1237). Hãy kiểm tra host, port, user/pass, passive mode, firewall/SSL và số kết nối FTP của host. Không mount. Exit code: " + exitCode;
             }
             if (text.IndexOf("Too many connections", StringComparison.OrdinalIgnoreCase) >= 0 || text.IndexOf("421", StringComparison.OrdinalIgnoreCase) >= 0)
                 return "FTP server đang giới hạn quá nhiều kết nối từ IP này. Hãy ngắt các ổ/phiên FTP cũ, đợi vài phút rồi thử lại. Không mount. Exit code: " + exitCode;
@@ -5913,7 +6334,7 @@ namespace RcloneDriveManager
             if (browserList.SelectedItems.Count == 0) return;
             var item = browserList.SelectedItems[0].Tag as RcloneFileItem;
             var name = item == null ? browserList.SelectedItems[0].Text : (item.Name ?? item.Path);
-            if (MessageBox.Show("Delete " + name + " ?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+            if (MessageBox.Show("Xóa " + name + " ?", "Xác nhận", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
             var target = JoinRemoteSource(RemotePath(browseRemoteCombo, browsePathBox), name.TrimEnd('/'));
             await RunCaptureAsync(item != null && item.IsDir ? "purge" : "deletefile", target);
             await BrowseListAsync();
@@ -6601,6 +7022,11 @@ namespace RcloneDriveManager
 
         private Task<RcloneResult> RunRcloneResultAsync(int timeoutMs, string safeLogLine, params string[] args)
         {
+            return RunRcloneResultAsync(null, timeoutMs, safeLogLine, args);
+        }
+
+        private Task<RcloneResult> RunRcloneResultAsync(DriveProfile profile, int timeoutMs, string safeLogLine, params string[] args)
+        {
             return Task.Run(() =>
             {
                 var result = new RcloneResult { ExitCode = -1, Output = "", TimedOut = false };
@@ -6624,6 +7050,7 @@ namespace RcloneDriveManager
                         RedirectStandardInput = true,
                         CreateNoWindow = true
                     };
+                    ApplyTunnelEnvironment(psi, profile);
 
                     using (var proc = Process.Start(psi))
                     {
@@ -6707,7 +7134,7 @@ namespace RcloneDriveManager
             });
         }
 
-        private Process StartRclone(List<string> args, bool shell)
+        private Process StartRclone(List<string> args, bool shell, DriveProfile profile = null)
         {
             var psi = new ProcessStartInfo
             {
@@ -6719,6 +7146,7 @@ namespace RcloneDriveManager
                 RedirectStandardError = !shell,
                 CreateNoWindow = !shell
             };
+            ApplyTunnelEnvironment(psi, profile);
             return Process.Start(psi);
         }
 
@@ -6791,7 +7219,7 @@ namespace RcloneDriveManager
                     "for %%L in (Z Y X W V U T S R Q P O N M L K J I H G F E D C) do (",
                     "  if not exist %%L:\\ (set \"DRIVE=%%L:\" & goto found)",
                     ")",
-                    "echo Khong tim thay ky tu o dia trong.",
+                    "echo Không tìm thấy ký tự ổ đĩa trống.",
                     "pause",
                     "exit /b 1",
                     ":found"
@@ -6799,7 +7227,7 @@ namespace RcloneDriveManager
                 var args = BuildMountArgs(p, "%DRIVE%", SafeVolName(p) + " %DRIVE:~0,1%");
                 lines.Add("\"%~dp0rclone.exe\" " + string.Join(" ", args.Select(QuoteIfNeeded)));
                 lines.Add("pause");
-                File.WriteAllText(file, string.Join("\r\n", lines) + "\r\n", Encoding.ASCII);
+                File.WriteAllText(file, string.Join("\r\n", lines) + "\r\n", new UTF8Encoding(false));
             }
             else
             {
@@ -6807,7 +7235,7 @@ namespace RcloneDriveManager
                 var args = BuildMountArgs(p, drive, SafeVolName(p, drive));
                 File.WriteAllText(file, "@echo off\r\ncd /d \"%~dp0\"\r\n\"%~dp0rclone.exe\" " + string.Join(" ", args.Select(QuoteIfNeeded)) + "\r\npause\r\n", Encoding.ASCII);
             }
-            AddLog("Created " + file);
+            AddLog("Đã tạo " + file);
         }
 
         private void CreateUnmountBatForSelected()
@@ -6824,25 +7252,25 @@ namespace RcloneDriveManager
             };
             if (IsAutoDrive(p.DriveLetter))
             {
-                lines.Add("set /p DRIVE=Nhap ky tu o can ngat, vi du X: ");
+                lines.Add("set /p DRIVE=Nhập ký tự ổ cần ngắt, ví dụ X: ");
             }
             else
             {
                 lines.Add("set \"DRIVE=" + NormalizeDriveChoice(p.DriveLetter) + "\"");
             }
             lines.Add("if \"%DRIVE:~-1%\" NEQ \":\" set \"DRIVE=%DRIVE%:\"");
-            lines.Add("echo Dang ngat %DRIVE% ...");
+            lines.Add("echo Đang ngắt %DRIVE% ...");
             lines.Add("powershell -NoProfile -ExecutionPolicy Bypass -Command \"$d=$env:DRIVE; Get-CimInstance Win32_Process -Filter \\\"Name='rclone.exe'\\\" | Where-Object { $_.CommandLine -match ' mount ' -and $_.CommandLine -like ('* ' + $d + '*') } | ForEach-Object { Write-Host ('Stop rclone PID ' + $_.ProcessId); Stop-Process -Id $_.ProcessId -Force }\"");
             lines.Add("net use %DRIVE% /delete /y");
             lines.Add("timeout /t 2 /nobreak >nul");
             lines.Add("if exist %DRIVE%\\ (");
-            lines.Add("  echo Van con thay o %DRIVE%. Hay chay file nay cung quyen voi luc mount hoac mo Task Manager kill rclone.exe mount.");
+            lines.Add("  echo Vẫn còn thấy ổ %DRIVE%. Hãy chạy file này cùng quyền với lúc mount hoặc mở Task Manager kill rclone.exe mount.");
             lines.Add(") else (");
-            lines.Add("  echo Da ngat %DRIVE%.");
+            lines.Add("  echo Đã ngắt %DRIVE%.");
             lines.Add(")");
             lines.Add("pause");
-            File.WriteAllText(file, string.Join("\r\n", lines) + "\r\n", Encoding.ASCII);
-            AddLog("Created " + file);
+            File.WriteAllText(file, string.Join("\r\n", lines) + "\r\n", new UTF8Encoding(false));
+            AddLog("Đã tạo " + file);
         }
     }
 

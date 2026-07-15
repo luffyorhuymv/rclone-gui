@@ -105,6 +105,7 @@ X:\
 - Co preset `Nhanh/RaiDrive`.
 - Co preset `Live`.
 - Co nut `Code IDE`.
+- Co nut `Code WS` de code trong local workspace va auto upload file sua len host.
 - Toi uu VFS/cache cho thao tac code:
   - `vfs-cache-mode full`
   - upload delay ngan
@@ -114,6 +115,23 @@ X:\
   - `Tai ve may`
   - `Day len host`
   - `Mo local`
+  - `Code WS`: watcher local, upload tung file bang `rclone copyto`
+
+### Code Workspace
+
+- Local workspace mac dinh:
+
+```text
+%USERPROFILE%\Documents\RcloneWorkspaces\<ten-profile>
+```
+
+- Khi bam `Code WS`:
+  - Neu local trong, app tai host ve may truoc.
+  - App bat `FileSystemWatcher`.
+  - File sua/tao/rename se duoc debounce roi upload bang `rclone copyto`.
+  - Xoa local chua tu xoa tren host de tranh mat du lieu.
+  - App ignore `.git`, `node_modules`, `vendor`, `.env`, `.user.ini`, `.well-known`, file tam.
+  - Neu co `.git`, app set `core.fscache=false`, `core.trustctime=false`, `core.checkstat=minimal`.
 
 ### Log
 

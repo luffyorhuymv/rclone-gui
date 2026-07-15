@@ -1,6 +1,47 @@
 # CHANGELOG
 
+## v1.0.63 - 2026-07-15
+
+- Sửa lỗi Cloudflare tunnel ghi đè vĩnh viễn `host/port` của remote trong `rclone.conf` thành `localhost:<port>`.
+- Preflight và mount giờ chỉ nhận `localhost:<port>` qua biến môi trường riêng của process rclone; cấu hình remote gốc được giữ nguyên.
+- Remote đã bị bản cũ ghi đè cần nhập lại host thật một lần; từ bản này app không làm hỏng lại cấu hình đó.
+- Build lại `RcloneDrive.exe` bản `v1.0.63`.
+
+## v1.0.62 - 2026-07-14
+
+- Nút `Mới` không còn tạo profile ngay từ form cũ; app mở form nháp trống và bắt buộc nhập tên profile + chọn remote/config trước khi `Lưu` hoặc `Kết nối`.
+- Khi đang tạo ổ mới, danh sách remote refresh không tự chọn remote đầu tiên để tránh lấy nhầm config cũ như `lap`, `tonghopbk`.
+- Nếu Cloudflare tunnel tắt nhưng remote rclone vẫn trỏ `localhost:<port>`, app báo lỗi rõ để người dùng sửa host thật hoặc bật tunnel.
+- Build lại `RcloneDrive.exe` bản `v1.0.62`.
+
+## v1.0.61 - 2026-07-14
+
+- Profile/ổ mới không còn tự bật `Mount Cloudflare tunnel` theo form cũ, profile cùng remote hoặc profile tunnel cũ.
+- Cloudflare tunnel chỉ bật khi người dùng tick thủ công trong profile đang chọn rồi lưu lại.
+- Build lại `RcloneDrive.exe` bản `v1.0.61`.
+
+## v1.0.60 - 2026-07-13
+
+- Sửa lỗi rclone VFS retry vô hạn khi host từ chối ghi `.user.ini`: mount FTP/SFTP luôn exclude `.user.ini`, `.ftpquota` và ACME challenge, kể cả khi người dùng có `--exclude` riêng.
+- Nút `Đẩy lên host` cũng tự bỏ qua `.user.ini`, `.ftpquota` để tránh lỗi `partial file rename failed: permission denied`.
+- Build lại `RcloneDrive.exe` bản `v1.0.60`.
+
+## v1.0.59 - 2026-07-10
+
+- Sửa các chuỗi UI/log tiếng Việt còn bị không dấu trong app: cập nhật, Code Workspace, OpenCode, Cloudflare tunnel, lỗi FTP và file BAT.
+- File BAT mount/ngắt sinh ra được ghi UTF-8 để giữ tiếng Việt có dấu.
+- Build lại `RcloneDrive.exe` bản `v1.0.59`.
+
 Tat ca thay doi dang chu y cua RcloneDrive GUI.
+
+## v1.0.58 - 2026-07-10
+
+- Them che do `Code Workspace`: code trong thu muc local va auto upload file vua sua len host.
+- Nut `Code WS` bat/tat watcher theo profile, tu tai host ve local neu workspace dang trong.
+- Auto upload dung `rclone copyto` tung file, debounce theo delay cau hinh, giam viec quet ca project tren FTP/SFTP.
+- Them ignore mac dinh cho `.git`, `node_modules`, `vendor`, `.env`, `.user.ini`, `.well-known`, file tam.
+- Them tuy chon bo qua upload neu file tren host co ve moi hon file local.
+- Khi local workspace co Git, app tu ap dung `core.fscache=false`, `core.trustctime=false`, `core.checkstat=minimal`.
 
 ## v1.0.57 - 2026-07-10
 

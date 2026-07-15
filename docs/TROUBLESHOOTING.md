@@ -51,6 +51,23 @@ Cach xu ly:
 2. Mo thu muc con can code, vi du theme/plugin.
 3. Tranh chay `rg --files` tren root FTP lon.
 4. Neu van cham, dung workflow local: `Tai ve may` -> code local -> `Day len host`.
+5. Tot hon nua, bam `Code WS` de code local va auto upload tung file vua sua len host.
+
+## Code Workspace khong tu upload
+
+Kiem tra:
+
+- Profile da bam `Code WS` chua.
+- Label trong tab `Nang cao` co bao `dang theo doi local va auto upload` khong.
+- File co nam trong ignore khong: `.git`, `node_modules`, `vendor`, `.env`, `.user.ini`, `.well-known`, file tam.
+- Thu muc local co phai `%USERPROFILE%\Documents\RcloneWorkspaces\<ten-profile>` hoac thu muc local da cau hinh khong.
+- Log co `permission denied`, `Too many connections`, hoac remote file moi hon khong.
+
+Luu y:
+
+- Xoa file local khong tu xoa tren host trong ban hien tai.
+- Neu host sua file tu noi khac va tuy chon `Khong ghi de file host moi hon` dang bat, app se bo qua upload de tranh ghi de.
+- Neu Git nam tren o mang/SMB, nen dung Code Workspace local thay vi code truc tiep tren o mount.
 
 ## FTP 421 Too many connections
 
