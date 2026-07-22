@@ -227,11 +227,12 @@ namespace RcloneDriveManager
     }
     public sealed class FlatTabControl : TabControl
     {
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
         private struct RECT { public int Left, Top, Right, Bottom; }
 
         public FlatTabControl()
         {
-            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             DoubleBuffered = true;
         }
 
@@ -239,13 +240,43 @@ namespace RcloneDriveManager
         {
             if (m.Msg == 0x1328 && !DesignMode) // TCM_ADJUSTRECT
             {
-                m.Result = (IntPtr)1;
-                var rect = (RECT)m.GetLParam(typeof(RECT));
-                rect.Top += ItemSize.Height + 4;
+                var rect = new RECT();
+                rect.Left = 0;
+                rect.Top = ItemSize.Height + 4;
+                rect.Right = Width;
+                rect.Bottom = Height;
                 System.Runtime.InteropServices.Marshal.StructureToPtr(rect, m.LParam, true);
+                m.Result = (IntPtr)1;
                 return;
             }
             base.WndProc(ref m);
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            var bgColor = Parent?.BackColor ?? BackColor;
+            using (var brush = new SolidBrush(bgColor))
+                e.Graphics.FillRectangle(brush, ClientRectangle);
+
+            if (SelectedTab != null)
+            {
+                var dispRect = DisplayRectangle;
+                using (var pageBrush = new SolidBrush(SelectedTab.BackColor))
+                    e.Graphics.FillRectangle(pageBrush, dispRect);
+            }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            // Manually paint tab headers since UserPaint suppresses DrawItem events
+            if (TabCount == 0) return;
+            for (int i = 0; i < TabCount; i++)
+            {
+                var tabRect = GetTabRect(i);
+                var args = new DrawItemEventArgs(e.Graphics, Font, tabRect, i,
+                    i == SelectedIndex ? DrawItemState.Selected : DrawItemState.Default);
+                OnDrawItem(args);
+            }
         }
     }
 
@@ -552,6 +583,7 @@ namespace RcloneDriveManager
                 SmallImageList = new ImageList { ImageSize = new Size(1, 74) }
             };
             profileList.Columns.Add("Ổ", 408);
+            profileList.Resize += (s, e) => { if (profileList.Columns.Count > 0) profileList.Columns[0].Width = profileList.ClientSize.Width; };
             profileList.DrawColumnHeader += (s, e) => e.DrawDefault = false;
             profileList.DrawItem += DrawDriveListItem;
             profileList.DrawSubItem += DrawDriveListSubItem;
@@ -614,9 +646,9 @@ namespace RcloneDriveManager
             mainTabs.TabPages.Add(BuildConfigToolsTab());
 
             var logPanel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, BackColor = Color.FromArgb(15, 23, 42), Padding = new Padding(8) };
-            logPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            logPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             logPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            logPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            logPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             liveLogLabel = new Label
             {
                 Text = "Log sẵn sàng",
@@ -824,7 +856,7 @@ namespace RcloneDriveManager
 
         private TabPage ConfigSectionPage(string title)
         {
-            return new TabPage(title) { BackColor = _surface, Padding = new Padding(12, 14, 12, 8), UseVisualStyleBackColor = false };
+            return new TabPage(title) { BackColor = _surface, Padding = new Padding(12, 14, 12, 8), UseVisualStyleBackColor = false, AutoScroll = true };
         }
 
         private TableLayoutPanel ConfigGrid(int rows)
@@ -893,8 +925,8 @@ namespace RcloneDriveManager
         {
             var page = new TabPage("Truyền dữ liệu") { BackColor = _surface, Padding = new Padding(12), UseVisualStyleBackColor = false };
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _surface };
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 180));
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             page.Controls.Add(pageLayout);
 
             var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, BackColor = _surface };
@@ -1076,9 +1108,9 @@ namespace RcloneDriveManager
         {
             var page = new TabPage("Thêm config") { BackColor = _surface, Padding = new Padding(12), UseVisualStyleBackColor = false, AutoScroll = true };
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, RowCount = 3, ColumnCount = 1, BackColor = _surface };
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 324));
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 130));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             page.Controls.Add(pageLayout);
 
             var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 2, BackColor = _surface };
@@ -4641,7 +4673,8 @@ namespace RcloneDriveManager
                 buttons.Controls.Add(ok);
                 buttons.Controls.Add(cancel);
                 form.Controls.Add(buttons);
-                contentPanel.BringToFront();
+                // buttons (DockStyle.Bottom) must stay visible below contentPanel (DockStyle.Fill)
+                buttons.BringToFront();
                 form.AcceptButton = ok;
                 form.CancelButton = cancel;
 
@@ -7427,7 +7460,13 @@ namespace RcloneDriveManager
                 }
             }
 
-            var clearColor = Parent?.BackColor ?? SystemColors.Control;
+            var clearColor = SystemColors.Control;
+            var p = Parent;
+            while (p != null)
+            {
+                if (p.BackColor != Color.Transparent && p.BackColor != Color.Empty) { clearColor = p.BackColor; break; }
+                p = p.Parent;
+            }
             using (var clearBrush = new SolidBrush(clearColor))
             {
                 g.FillRectangle(clearBrush, rect);
@@ -7461,8 +7500,9 @@ namespace RcloneDriveManager
                 }
             }
 
-            var textFlags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis;
-            TextRenderer.DrawText(g, Text, Font, rect, foreColor, textFlags);
+            var textFlags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+            var textRect = new Rectangle(rect.X + 4, rect.Y + 2, rect.Width - 8, rect.Height - 4);
+            TextRenderer.DrawText(g, Text, Font, textRect, foreColor, textFlags);
         }
     }
 }
