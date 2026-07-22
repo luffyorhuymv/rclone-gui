@@ -4673,8 +4673,9 @@ namespace RcloneDriveManager
                 buttons.Controls.Add(ok);
                 buttons.Controls.Add(cancel);
                 form.Controls.Add(buttons);
-                // buttons (DockStyle.Bottom) must stay visible below contentPanel (DockStyle.Fill)
-                buttons.BringToFront();
+                // WinForms docks in reverse z-order: highest z-order docks last.
+                // contentPanel (Fill) must dock last so buttons (Bottom) reserves space first.
+                contentPanel.BringToFront();
                 form.AcceptButton = ok;
                 form.CancelButton = cancel;
 
