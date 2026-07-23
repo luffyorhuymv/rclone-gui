@@ -925,8 +925,8 @@ namespace RcloneDriveManager
         {
             var page = new TabPage("Truyền dữ liệu") { BackColor = _surface, Padding = new Padding(12), UseVisualStyleBackColor = false };
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = _surface };
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 190));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             page.Controls.Add(pageLayout);
 
             var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, BackColor = _surface };
@@ -1110,7 +1110,7 @@ namespace RcloneDriveManager
             var pageLayout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, RowCount = 3, ColumnCount = 1, BackColor = _surface };
             pageLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             pageLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            pageLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            pageLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
             page.Controls.Add(pageLayout);
 
             var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 2, BackColor = _surface };
