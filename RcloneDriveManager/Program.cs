@@ -227,55 +227,59 @@ namespace RcloneDriveManager
     }
     public sealed class FlatTabControl : TabControl
     {
-        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-        private struct RECT { public int Left, Top, Right, Bottom; }
-
         public FlatTabControl()
         {
-            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-            DoubleBuffered = true;
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         }
 
         protected override void WndProc(ref Message m)
         {
-            if (m.Msg == 0x1328 && !DesignMode) // TCM_ADJUSTRECT
-            {
-                var rect = new RECT();
-                rect.Left = 0;
-                rect.Top = ItemSize.Height + 4;
-                rect.Right = Width;
-                rect.Bottom = Height;
-                System.Runtime.InteropServices.Marshal.StructureToPtr(rect, m.LParam, true);
-                m.Result = (IntPtr)1;
-                return;
-            }
             base.WndProc(ref m);
-        }
 
-        protected override void OnPaintBackground(PaintEventArgs e)
-        {
-            var bgColor = Parent?.BackColor ?? BackColor;
-            using (var brush = new SolidBrush(bgColor))
-                e.Graphics.FillRectangle(brush, ClientRectangle);
-
-            if (SelectedTab != null)
+            // After native painting, paint over the 3D borders around the tab page area
+            if (m.Msg == 0x000F) // WM_PAINT
             {
-                var dispRect = DisplayRectangle;
-                using (var pageBrush = new SolidBrush(SelectedTab.BackColor))
-                    e.Graphics.FillRectangle(pageBrush, dispRect);
-            }
-        }
+                using (var g = CreateGraphics())
+                {
+                    var bgColor = Parent?.BackColor ?? BackColor;
 
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            // Manually paint tab headers since UserPaint suppresses DrawItem events
-            if (TabCount == 0) return;
-            for (int i = 0; i < TabCount; i++)
-            {
-                var tabRect = GetTabRect(i);
-                var args = new DrawItemEventArgs(e.Graphics, Font, tabRect, i,
-                    i == SelectedIndex ? DrawItemState.Selected : DrawItemState.Default);
-                OnDrawItem(args);
+                    // Paint over the border area between tab strip and tab page content
+                    if (TabCount > 0 && SelectedTab != null)
+                    {
+                        var tabBottom = GetTabRect(0).Bottom;
+                        var dispRect = DisplayRectangle;
+
+                        // Fill gap between tab strip bottom and display rect top (the top border)
+                        if (dispRect.Top > tabBottom)
+                        {
+                            using (var brush = new SolidBrush(SelectedTab.BackColor))
+                                g.FillRectangle(brush, 0, tabBottom, Width, dispRect.Top - tabBottom);
+                        }
+
+                        // Fill left border
+                        if (dispRect.Left > 0)
+                        {
+                            using (var brush = new SolidBrush(SelectedTab.BackColor))
+                                g.FillRectangle(brush, 0, dispRect.Top, dispRect.Left, dispRect.Height);
+                        }
+
+                        // Fill right border
+                        var rightBorder = dispRect.Right;
+                        if (rightBorder < Width)
+                        {
+                            using (var brush = new SolidBrush(SelectedTab.BackColor))
+                                g.FillRectangle(brush, rightBorder, dispRect.Top, Width - rightBorder, dispRect.Height);
+                        }
+
+                        // Fill bottom border
+                        var bottomBorder = dispRect.Bottom;
+                        if (bottomBorder < Height)
+                        {
+                            using (var brush = new SolidBrush(SelectedTab.BackColor))
+                                g.FillRectangle(brush, 0, bottomBorder, Width, Height - bottomBorder);
+                        }
+                    }
+                }
             }
         }
     }
