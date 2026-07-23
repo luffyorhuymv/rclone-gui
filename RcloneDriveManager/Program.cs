@@ -650,9 +650,9 @@ namespace RcloneDriveManager
             mainTabs.TabPages.Add(BuildConfigToolsTab());
 
             var logPanel = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, ColumnCount = 1, BackColor = Color.FromArgb(15, 23, 42), Padding = new Padding(8) };
-            logPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            logPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             logPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            logPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            logPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
             liveLogLabel = new Label
             {
                 Text = "Log sẵn sàng",
